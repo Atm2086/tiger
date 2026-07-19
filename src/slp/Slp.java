@@ -6,53 +6,49 @@ import java.util.List;
 public class Slp {
     // ////////////////////////////////////////////////
     // expression
-    public static class Exp {
-        // the type
-        public sealed interface T
-                permits Eseq, Id, Op, Num {
-        }
+    public sealed interface Exp
+            // the type
+            permits Exp.Eseq, Exp.Id, Exp.Op, Exp.Num {
 
         // s, e
-        public record Eseq(Stm.T stm,
-                           T exp) implements T {
+        public record Eseq(Stm stm,
+                           Exp exp) implements Exp {
         }
 
         // x
-        public record Id(String id) implements T {
+        public record Id(String id) implements Exp {
         }
 
         // e bop e
-        public record Op(T left,
+        public record Op(Exp left,
                          String op,
-                         T right) implements T {
+                         Exp right) implements Exp {
         }
 
         // n
-        public record Num(int num) implements T {
+        public record Num(int num) implements Exp {
         }
     }
     // end of expression
 
     // ///////////////////////////////////////////////
     // statement
-    public static class Stm {
-        // the type
-        public sealed interface T
-                permits Assign, Compound, Print {
-        }
+    public sealed interface Stm
+            // the type
+            permits Stm.Assign, Stm.Compound, Stm.Print {
 
         // x := e
         public record Assign(String id,
-                             Exp.T exp) implements T {
+                             Exp exp) implements Stm {
         }
 
         // s1; s2
-        public record Compound(T s1,
-                               T s2) implements T {
+        public record Compound(Stm s1,
+                               Stm s2) implements Stm {
         }
 
         // print(explist)
-        public record Print(List<Exp.T> exps) implements T {
+        public record Print(List<Exp> exps) implements Stm {
         }
     }
     // end of statement

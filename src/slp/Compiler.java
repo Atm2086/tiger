@@ -16,7 +16,7 @@ import java.util.List;
 public class Compiler {
     // ////////////////////////////////////////
     // whether to keep the generated assembly file.
-    boolean keepAsm = false;
+    boolean keepAsm = true;
     HashSet<String> ids;
     StringBuffer buf;
 
@@ -24,14 +24,14 @@ public class Compiler {
         buf.append(s);
     }
 
-    private void compileExp(Exp.T exp) {
+    private void compileExp(Exp exp) {
         switch (exp) {
             case Id(String x) -> emit("\tmovq\t" + x + ", %rax\n");
             case Num(int n) -> emit("\tmovq\t$" + n + ", %rax\n");
             case Op(
-                    Exp.T left,
+                    Exp left,
                     String op,
-                    Exp.T right
+                    Exp right
             ) -> {
                 compileExp(left);
                 emit("\tpushq\t%rax\n");
@@ -39,13 +39,22 @@ public class Compiler {
                 emit("\tpopq\t%rdx\n");
                 switch (op) {
                     case "+" -> emit("\taddq\t%rdx, %rax\n");
+                    case "-" -> {
+                        emit("\tsubq\t%rax, %rdx\n");
+                        emit("\tmovq\t%rdx, %rax\n");
+                    }
                     case "*" -> emit("\timulq\t%rdx\n");
+                    case "/" -> {
+                        emit("\tmovq\t%rdx, %rcx\n");
+                        emit("\tcqto\n");
+                        emit("\tidivq\t%rcx\n");
+                    }
                     default -> throw new Todo(op);
                 }
             }
             case Eseq(
-                    Stm.T s,
-                    Exp.T e
+                    Stm s,
+                    Exp e
             ) -> {
                 compileStm0(s);
                 compileExp(e);
@@ -54,24 +63,24 @@ public class Compiler {
     }
 
     // to compile a statement
-    private void compileStm0(Stm.T s) {
+    private void compileStm0(Stm s) {
         switch (s) {
             case Stm.Compound(
-                    Stm.T s1,
-                    Stm.T s2
+                    Stm s1,
+                    Stm s2
             ) -> {
                 compileStm0(s1);
                 compileStm0(s2);
             }
             case Stm.Assign(
                     String x,
-                    Exp.T e
+                    Exp e
             ) -> {
                 ids.add(x);
                 compileExp(e);
                 emit("\tmovq\t%rax, " + x + "\n");
             }
-            case Stm.Print(List<Exp.T> exps) -> {
+            case Stm.Print(List<Exp> exps) -> {
                 exps.forEach(e -> {
                     compileExp(e);
                     emit("""
@@ -89,7 +98,7 @@ public class Compiler {
     }
 
     // ////////////////////////////////////////
-    public void compileStm(Stm.T prog) throws Exception {
+    public void compileStm(Stm prog) throws Exception {
         // we always reset these two variables, so that this
         // method is re-entrant.
         this.ids = new HashSet<>();
