@@ -285,7 +285,17 @@ public class Parser {
 
     public Object parse() {
         initParser();
-        parseProgram();
+//        parseProgram();
+//        finalizeParser();
+//        return null;
+        while (!current.kind.equals(Token.Kind.EOF)) {
+            System.out.println(current);
+            advance();
+        }
+
+        // 把 EOF 也打印出来
+        System.out.println(current);
+
         finalizeParser();
         return null;
     }
