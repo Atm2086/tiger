@@ -3,6 +3,7 @@ package slp;
 import slp.Slp.Exp;
 import slp.Slp.Stm;
 
+import java.util.Iterator;
 import java.util.List;
 
 import static java.lang.System.out;
@@ -21,20 +22,20 @@ public class PrettyPrint {
 
     // ///////////////////////////////////////////
     // print expression
-    private void ppExp(Exp.T exp) {
+    private void ppExp(Exp exp) {
         switch (exp) {
             case Exp.Num(int n) -> print(Integer.valueOf(n).toString());
             case Exp.Id(String x) -> print(x);
             case Exp.Op(
-                    Exp.T left,
+                    Exp left,
                     String bop,
-                    Exp.T right
+                    Exp right
             ) -> {
                 ppExp(left);
                 print(bop);
                 ppExp(right);
             }
-            case Exp.Eseq(Stm.T stm, Exp.T e) -> {
+            case Exp.Eseq(Stm stm, Exp e) -> {
                 print("(");
                 ppStm(stm);
                 print(", ");
@@ -46,11 +47,11 @@ public class PrettyPrint {
 
     // ///////////////////////////////////////////
     // print statement
-    public void ppStm(Stm.T stm) {
+    public void ppStm(Stm stm) {
         switch (stm) {
             case Stm.Compound(
-                    Stm.T s1,
-                    Stm.T s2
+                    Stm s1,
+                    Stm s2
             ) -> {
                 ppStm(s1);
                 println(";");
@@ -58,18 +59,23 @@ public class PrettyPrint {
             }
             case Stm.Assign(
                     String x,
-                    Exp.T e
+                    Exp e
             ) -> {
                 print(x + " = ");
                 ppExp(e);
             }
-            case Stm.Print(List<Exp.T> exps) -> {
+            case Stm.Print(List<Exp> exps) -> {
                 System.out.print("print(");
-                exps.forEach(x -> {
-                            ppExp(x);
-                            print(", ");
-                        }
-                );
+                Iterator<Exp> iterator = exps.iterator();
+                while ( iterator.hasNext()) {
+                    Exp element = iterator.next();
+                    if ( !iterator.hasNext() ) {
+                        ppExp(element);
+                    } else {
+                        ppExp(element);
+                        print(",");
+                    }
+                }
                 System.out.print(")");
             }
         }

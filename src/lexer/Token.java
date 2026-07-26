@@ -7,20 +7,58 @@ import java.util.Optional;
 public class Token {
     // alphabetically ordered
     public enum Kind {
-        ADD,
+        // special token
+        EOF,
+
+        // token with lexeme/number
+        ID,
+        INTEGER_LITERAL,
+
+        // keywords
         CLASS,
+        PUBLIC,
+        STATIC,
+        VOID,
+        MAIN,
+        NEW,
+        EXTENDS,
+        RETURN,
+        THIS,
+        SYSTEM,
+        OUT,
+        PRINTLN,
+
+        INT,
+        STRING,
+        BOOLEAN,
+        TRUE,
+        FALSE,
+
+        IF,
+        ELSE,
+        WHILE,
+
+        // OP
+        ASSIGN,
+        ADD,
+        MINUS,
+        TIMES,
+        DIV,
+        AND,
+        LT,
+        NOT,
+        LENGTH,
+
+        // SYMBOL
         COMMA,
         DOT,
-        EOF,
-        ID,
-        INT,
-        LBRACKET,
-        LENGTH,
-        LPAREN,
-        NEW,
-        RBRACKET,
-        RPAREN,
         SEMICOLON,
+        LBRACKET,
+        RBRACKET,
+        LPAREN,
+        RPAREN,
+        LBRACE,
+        RBRACE
     }
 
     // kind of the token
