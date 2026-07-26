@@ -24,6 +24,9 @@ public class Token {
         EXTENDS,
         RETURN,
         THIS,
+        SYSTEM,
+        OUT,
+        PRINTLN,
 
         INT,
         STRING,
@@ -35,14 +38,12 @@ public class Token {
         ELSE,
         WHILE,
 
-        // PRINT
-        SYSTEM_OUT_PRINT,
-
         // OP
         ASSIGN,
         ADD,
         MINUS,
         TIMES,
+        DIV,
         AND,
         LT,
         NOT,

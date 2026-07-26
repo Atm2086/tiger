@@ -24,6 +24,9 @@ public class Lexer {
             Map.entry("extends", Token.Kind.EXTENDS),
             Map.entry("return", Token.Kind.RETURN),
             Map.entry("this", Token.Kind.THIS),
+            Map.entry("System", Token.Kind.SYSTEM),
+            Map.entry("out", Token.Kind.OUT),
+            Map.entry("println", Token.Kind.PRINTLN),
 
             Map.entry("int", Token.Kind.INT),
             Map.entry("String", Token.Kind.STRING),
@@ -137,19 +140,9 @@ public class Lexer {
         }
         String s = lexeme.toString();
 
-        if (s.equals("System") && peek() == '.') {
-            consumeExpected(".out.println");
-
-            return new Token(
-                    Token.Kind.SYSTEM_OUT_PRINT,
-                    rowNum,
-                    colNum
-            );
-        }
-
         Token.Kind kind = KEYWORDS.get(s);
         if (kind != null) {
-            return new Token(kind, s, rowNum, colNum);
+            return new Token(kind, rowNum, colNum);
         }
 
         return new Token(Token.Kind.ID, lexeme.toString(), rowNum, colNum);
@@ -176,6 +169,17 @@ public class Lexer {
                 }
                 c = consume();   // 消耗第二个 &
                 yield new Token(Token.Kind.AND, rowNum, colNum);
+            }
+            case '/' -> {
+                if (peek() == '/') {
+                    while (peek() != '\n') {
+                        consume();
+                    }
+                    consume();
+                    yield nextToken();
+                }
+                c = consume();   // 消耗第二个 &
+                yield new Token(Token.Kind.DIV, rowNum, colNum);
             }
             // punctuation
             case ',' -> new Token(Token.Kind.COMMA, rowNum, colNum);
