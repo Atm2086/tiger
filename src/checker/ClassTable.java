@@ -18,13 +18,13 @@ public class ClassTable {
     }
 
     // a special type for method: argument and return types
-    public record MethodType(Type.T retType,
-                             List<Ast.Type.T> argsType) {
+    public record MethodType(Type retType,
+                             List<Ast.Type> argsType) {
         @Override
         public String toString() {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("(");
-            for (Type.T type : this.argsType) {
+            for (Type type : this.argsType) {
                 stringBuilder.append(type.toString() + ", ");
             }
             stringBuilder.append(") -> " + this.retType.toString());
@@ -36,13 +36,13 @@ public class ClassTable {
     public record Binding(
             // null for empty extends
             Id extends_,
-            Ast.Class.T self,
+            Ast.Class self,
             // the field in a class: its type and fresh id
-            java.util.HashMap<Id, Tuple.Two<Type.T, Id>> fields,
+            java.util.HashMap<Id, Tuple.Two<Type, Id>> fields,
             // the method in a class: its type and fresh id
             java.util.HashMap<Id, Tuple.Two<MethodType, Id>> methods) {
 
-        public void putField(Id fieldId, Type.T type, Id freshId) {
+        public void putField(Id fieldId, Type type, Id freshId) {
             if (this.fields.get(fieldId) != null) {
                 error("duplicated class field: " + fieldId);
             }
@@ -76,7 +76,7 @@ public class ClassTable {
     }
 
     // Duplication is not allowed
-    public void putClass(Id classId, Id extends_, Ast.Class.T self) {
+    public void putClass(Id classId, Id extends_, Ast.Class self) {
         if (this.classTable.get(classId) != null) {
             error("duplicated class: " + classId);
         }
@@ -89,7 +89,7 @@ public class ClassTable {
 
     // put a field into class table
     // Duplication is not allowed
-    public void putField(Id classId, Ast.AstId fieldId, Type.T type) {
+    public void putField(Id classId, Ast.AstId fieldId, Type type) {
         Binding classBinding = this.classTable.get(classId);
         Id freshId = fieldId.genFreshId();
         classBinding.putField(fieldId.id, type, freshId);
@@ -112,7 +112,7 @@ public class ClassTable {
 
     // get type of some field
     // return null for non-existing field.
-    public Tuple.Two<Type.T, Id> getField(Id classId, Id fieldId) {
+    public Tuple.Two<Type, Id> getField(Id classId, Id fieldId) {
         Binding classBinding = this.classTable.get(classId);
         var result = classBinding.fields.get(fieldId);
         while (result == null) { // search all parent classes until found or fail

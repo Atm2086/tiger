@@ -11,12 +11,10 @@ import java.util.List;
 public class Ast {
     // /////////////////////////////////////////////////////////
     // ast-id
-    // we use class instead of record, as we need to change its
-    // fields
     public static class AstId {
         public Id id;
         public Id freshId;
-        public Type.T type;
+        public Type type;
         public boolean isClassField;
 
         public AstId(Id id) {
@@ -35,47 +33,45 @@ public class Ast {
 
     //  ///////////////////////////////////////////////////////////
     //  type
-    public static class Type {
-        public sealed interface T
-                permits Boolean, ClassType, Int, IntArray {
-        }
+    public sealed interface Type
+                permits Type.Boolean, Type.ClassType, Type.Int, Type.IntArray {
 
         // boolean
-        public record Boolean() implements T {
+        public record Boolean() implements Type {
         }
 
         // class "id"
-        public record ClassType(Id id) implements T {
+        public record ClassType(Id id) implements Type {
         }
 
         // int
-        public record Int() implements T {
+        public record Int() implements Type {
         }
 
         // int[]
-        public record IntArray() implements T {
+        public record IntArray() implements Type {
         }
 
         // singleton design pattern
-        private static final Type.T boolTy = new IntArray();
-        private static final Type.T intTy = new Int();
-        private static final Type.T intArrayTy = new IntArray();
-        private static final HashMap<Id, Type.T> classTyContainer = new HashMap<>();
+        Type boolTy = new Type.Boolean();
+        Type intTy = new Type.Int();
+        Type intArrayTy = new Type.IntArray();
+        HashMap<Id, Type> classTyContainer = new HashMap<>();
 
-        public static Type.T getInt() {
+        public static Type getInt() {
             return intTy;
         }
 
-        public static Type.T getBool() {
+        public static Type getBool() {
             return boolTy;
         }
 
-        public static Type.T getIntArray() {
+        public static Type getIntArray() {
             return intArrayTy;
         }
 
-        public static Type.T getClassType(Id id) {
-            Type.T ty = classTyContainer.get(id);
+        public static Type getClassType(Id id) {
+            Type ty = classTyContainer.get(id);
             if (ty == null) {
                 ty = new ClassType(id);
                 classTyContainer.put(id, ty);
@@ -84,12 +80,12 @@ public class Ast {
         }
 
         // do not confuse with the "equals" method from Object.
-        public static boolean nonEquals(Type.T ty1, Type.T ty2) {
+        public static boolean nonEquals(Type ty1, Type ty2) {
             // compare the two references' value
             return ty1 != ty2;
         }
 
-        public static void output(Type.T ty) {
+        public static void output(Type ty) {
             switch (ty) {
                 case Type.Boolean() -> System.out.println("boolean");
                 case Type.Int() -> System.out.print("int");
@@ -97,7 +93,7 @@ public class Ast {
             }
         }
 
-        public static String convertString(Type.T ty) {
+        public static String convertString(Type ty) {
             switch (ty) {
                 case Type.Boolean() -> {
                     return "boolean";
@@ -112,18 +108,17 @@ public class Ast {
 
     // ///////////////////////////////////////////////////
     // declaration
-    public static class Dec {
-        public sealed interface T
-                permits Singleton {
+    public sealed interface Dec
+                permits Dec.Singleton {
+
+
+        public record Singleton(Type type,
+                                AstId aid) implements Dec {
         }
 
-        public record Singleton(Type.T type,
-                                AstId aid) implements T {
-        }
-
-        public static Type.T getType(T dec) {
+        public static Type getType(Dec dec) {
             switch (dec) {
-                case Singleton(Type.T type, _) -> {
+                case Singleton(Type type, _) -> {
                     return type;
                 }
             }
@@ -133,171 +128,161 @@ public class Ast {
 
     // /////////////////////////////////////////////////////////
     // expression
-    public static class Exp {
+    public sealed interface Exp
         // alphabetically-ordered
-        public sealed interface T
-                permits ArraySelect, Bop, BopBool, Call, ExpId,
-                False, Length, NewIntArray, NewObject, Num, This, True, Uop {
-        }
+                permits Exp.ArraySelect, Exp.Bop, Exp.BopBool, Exp.Call, Exp.ExpId,
+                        Exp.False, Exp.Length, Exp.NewIntArray,
+                        Exp.NewObject, Exp.Num, Exp.This, Exp.True, Exp.Uop {
+
 
         // ArraySelect
-        public record ArraySelect(T array,
-                                  T index) implements T {
+        public record ArraySelect(Exp array,
+                                  Exp index) implements Exp {
         }
 
         // binary operations
-        public record Bop(T left,
+        public record Bop(Exp left,
                           String op,
-                          T right) implements T {
+                          Exp right) implements Exp {
         }
 
         // op is a boolean operator
-        public record BopBool(T left,
+        public record BopBool(Exp left,
                               String op,
-                              T right) implements T {
+                              Exp right) implements Exp {
         }
 
         // Call
-        public record Call(T exp,
+        public record Call(Exp exp,
                            AstId methodId,
-                           List<T> args,
+                           List<Exp> args,
                            // type of object "exp"
                            // we use "Id" instead of "Type", as it must be class
                            Tuple.One<Id> theObjectType,
-                           Tuple.One<Type.T> retType) implements T {
+                           Tuple.One<Type> retType) implements Exp {
         }
 
         // ExpId
-        public record ExpId(AstId id) implements T {
+        public record ExpId(AstId id) implements Exp {
         }
 
         // False
-        public record False() implements T {
+        public record False() implements Exp {
         }
 
         // length
-        public record Length(T array) implements T {
+        public record Length(Exp array) implements Exp {
         }
 
         // new int [e]
-        public record NewIntArray(T exp) implements T {
+        public record NewIntArray(Exp exp) implements Exp {
         }
 
         // new A();
-        public record NewObject(Id id) implements T {
+        public record NewObject(Id id) implements Exp {
         }
 
         // number
-        public record Num(int num) implements T {
+        public record Num(int num) implements Exp {
         }
 
         // this
-        public record This() implements T {
+        public record This() implements Exp {
         }
 
         // True
-        public record True() implements T {
+        public record True() implements Exp {
         }
 
         // !
         public record Uop(String op,
-                          T exp) implements T {
+                          Exp exp) implements Exp {
         }
     }
     // end of expression
 
     // /////////////////////////////////////////////////////////
     // statement
-    public static class Stm {
+    public sealed interface  Stm
         // alphabetically-ordered
-        public sealed interface T
-                permits Assign, AssignArray, Block, If,
-                Print, While {
-        }
+                permits Stm.Assign, Stm.AssignArray, Stm.Block, Stm.If,
+                        Stm.Print, Stm.While {
 
         // assign: id = exp;
         public record Assign(AstId aid,
-                             Exp.T exp) implements T {
+                             Exp exp) implements Stm {
         }
 
         // assign-array: id[exp] = exp
         public record AssignArray(AstId id,
-                                  Exp.T index,
-                                  Exp.T exp) implements T {
+                                  Exp index,
+                                  Exp exp) implements Stm {
         }
 
         // block
-        public record Block(List<T> stms) implements T {
+        public record Block(List<Stm> stms) implements Stm {
         }
 
         // if
-        public record If(Exp.T cond,
-                         T thenn,
-                         T elsee) implements T {
+        public record If(Exp cond,
+                         Stm thenn,
+                         Stm elsee) implements Stm {
         }
 
         // System.out.println
-        public record Print(Exp.T exp) implements T {
+        public record Print(Exp exp) implements Stm {
         }
 
         // while
-        public record While(Exp.T cond,
-                            T body) implements T {
+        public record While(Exp cond,
+                            Stm body) implements Stm {
         }
     }
     // end of statement
 
     // /////////////////////////////////////////////////////////
     // method
-    public static class Method {
-        public sealed interface T
-                permits Singleton {
-        }
+    public sealed interface Method
+                permits Method.Singleton {
 
-        public record Singleton(Type.T retType,
+        public record Singleton(Type retType,
                                 AstId methodId,
-                                List<Dec.T> formals,
-                                List<Dec.T> locals,
-                                List<Stm.T> stms,
-                                Exp.T retExp) implements T {
+                                List<Dec> formals,
+                                List<Dec> locals,
+                                List<Stm> stms,
+                                Exp retExp) implements Method {
         }
     }
 
     // class
-    public static class Class {
-        public sealed interface T
-                permits Singleton {
-        }
+    public sealed interface Class
+                permits Class.Singleton {
 
         public record Singleton(Id classId,
                                 Id extends_, // "null" for non-existing "extends"
-                                List<Dec.T> decs,
-                                List<ast.Ast.Method.T> methods,
+                                List<Dec> decs,
+                                List<ast.Ast.Method> methods,
                                 // contain null element for non-existing parent
-                                Tuple.One<Class.T> parent) implements T {
+                                Tuple.One<Class> parent) implements Class {
         }
     }
 
     // main class
-    public static class MainClass {
-        public sealed interface T
-                permits Singleton {
-        }
+    public sealed interface MainClass
+                permits MainClass.Singleton {
 
         public record Singleton(Id classId,
                                 AstId arg,
-                                Stm.T stm) implements T {
+                                Stm stm) implements MainClass {
         }
     }
 
     // whole program
-    public static class Program {
-        public sealed interface T
-                permits Singleton {
-        }
+    public sealed interface Program
+                permits Program.Singleton {
 
-        public record Singleton(MainClass.T mainClass,
-                                List<Class.T> classes) implements T {
+        public record Singleton(MainClass mainClass,
+                                List<Class> classes) implements Program {
         }
     }
 }

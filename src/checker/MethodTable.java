@@ -13,15 +13,15 @@ import java.util.List;
 // the method table is constructed for each method.
 public class MethodTable {
     // map a variable, to its corresponding type and a fresh name.
-    private final java.util.HashMap<Id, Tuple.Two<Type.T, Id>> table;
+    private final java.util.HashMap<Id, Tuple.Two<Type, Id>> table;
 
     public MethodTable() {
         this.table = new java.util.HashMap<>();
     }
 
     // Duplication is not allowed
-    public void putFormalLocal(List<Dec.T> formals, List<Dec.T> locals) {
-        for (Dec.T dec : formals) {
+    public void putFormalLocal(List<Dec> formals, List<Dec> locals) {
+        for (Dec dec : formals) {
             Dec.Singleton decc = (Dec.Singleton) dec;
             Ast.AstId aid = decc.aid();
             Id freshId = aid.genFreshId();
@@ -32,7 +32,7 @@ public class MethodTable {
             this.table.put(aid.id, new Tuple.Two<>(decc.type(), freshId));
         }
 
-        for (Dec.T dec : locals) {
+        for (Dec dec : locals) {
             Dec.Singleton decc = (Dec.Singleton) dec;
             Ast.AstId aid = decc.aid();
             Id freshId = aid.genFreshId();
@@ -45,7 +45,7 @@ public class MethodTable {
     }
 
     // return null for non-existing keys
-    public Tuple.Two<Type.T, Id> get(Id id) {
+    public Tuple.Two<Type, Id> get(Id id) {
         return this.table.get(id);
     }
 

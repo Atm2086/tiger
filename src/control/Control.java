@@ -30,7 +30,7 @@ public class Control {
 
     // this is a special hack to test the compiler
     // without hacking the lexer and parser.
-    public static Ast.Program.T bultinAst = null;
+    public static Ast.Program bultinAst = null;
 
     // the lexer
     public static class Lexer {

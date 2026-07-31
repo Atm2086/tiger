@@ -29,7 +29,7 @@ public class Checker {
         System.exit(1);
     }
 
-    private void error(String s, Type.T expected, Type.T got) {
+    private void error(String s, Type expected, Type got) {
         System.out.println("Error: type mismatch: " + s);
         Type.output(expected);
         Type.output(got);
@@ -38,10 +38,10 @@ public class Checker {
 
     // /////////////////////////////////////////////////////
     // ast-id
-    private Type.T checkAstId(AstId aid) {
+    private Type checkAstId(AstId aid) {
         boolean isClassField = false;
         // first search in current method table
-        Tuple.Two<Ast.Type.T, Id> resultId = this.methodTable.get(aid.id);
+        Tuple.Two<Ast.Type, Id> resultId = this.methodTable.get(aid.id);
         // not a local or formal
         if (resultId == null) {
             isClassField = true;
@@ -60,14 +60,14 @@ public class Checker {
     // /////////////////////////////////////////////////////
     // expressions
     // type check an expression will return its type.
-    private Type.T checkExp(Exp.T e) {
+    private Type checkExp(Exp e) {
         switch (e) {
             case Exp.Call(
-                    Exp.T theObject,
+                    Exp theObject,
                     AstId methodId,
-                    List<Exp.T> args,
+                    List<Exp> args,
                     Tuple.One<Id> calleeTy,
-                    Tuple.One<Type.T> retTy
+                    Tuple.One<Type> retTy
             ) -> {
                 var typeOfTheObject = checkExp(theObject);
                 Id calleeClassId = null;
@@ -83,7 +83,7 @@ public class Checker {
                 var resultArgs = args.stream().map(this::checkExp).toList();
                 assert resultMethodId != null;
                 methodId.freshId = resultMethodId.second();
-                Ast.Type.T retType = resultMethodId.first().retType();
+                Ast.Type retType = resultMethodId.first().retType();
                 // put the return type onto the AST
                 retTy.set(retType);
                 return retType;
@@ -96,9 +96,9 @@ public class Checker {
                 return Type.getInt();
             }
             case Exp.Bop(
-                    Exp.T left,
+                    Exp left,
                     String bop,
-                    Exp.T right
+                    Exp right
             ) -> {
                 var resultLeft = checkExp(left);
                 var resultRight = checkExp(right);
@@ -132,12 +132,12 @@ public class Checker {
     }
 
     // type check a statement
-    private void checkStm(Stm.T s) {
+    private void checkStm(Stm s) {
         switch (s) {
             case Stm.If(
-                    Exp.T cond,
-                    Stm.T then_,
-                    Stm.T else_
+                    Exp cond,
+                    Stm then_,
+                    Stm else_
             ) -> {
                 var resultCond = checkExp(cond);
                 if (Type.nonEquals(resultCond, Type.getBool())) {
@@ -146,7 +146,7 @@ public class Checker {
                 checkStm(then_);
                 checkStm(else_);
             }
-            case Stm.Print(Exp.T exp) -> {
+            case Stm.Print(Exp exp) -> {
                 var resultExp = checkExp(exp);
                 if (Type.nonEquals(resultExp, Type.getInt())) {
                     error("print requires an integer type");
@@ -154,7 +154,7 @@ public class Checker {
             }
             case Stm.Assign(
                     AstId id,
-                    Exp.T exp
+                    Exp exp
             ) -> {
                 // first lookup in the method table
                 var resultAstId = checkAstId(id);
@@ -168,22 +168,22 @@ public class Checker {
     }
 
     // check type
-    public void checkType(Type.T t) {
+    public void checkType(Type t) {
         throw new Todo();
     }
 
     // dec
-    public void checkDec(Dec.T d) {
+    public void checkDec(Dec d) {
         throw new Todo();
     }
 
     // method type
-    private List<Type.T> genMethodArgType(List<Dec.T> decs) {
+    private List<Type> genMethodArgType(List<Dec> decs) {
         return decs.stream().map(Dec::getType).toList();
     }
 
     // method
-    private void checkMethod(Method.T mtd) {
+    private void checkMethod(Method mtd) {
         Method.Singleton m = (Method.Singleton) mtd;
         // construct the method table
         this.methodTable = new MethodTable();
@@ -196,7 +196,7 @@ public class Checker {
     }
 
     // class
-    private void checkClass(Class.T c) {
+    private void checkClass(Class c) {
         Class.Singleton cls = (Class.Singleton) c;
         this.currentClass = cls.classId();
         Id extends_ = cls.extends_();
@@ -208,7 +208,7 @@ public class Checker {
     }
 
     // main class
-    private void checkMainClass(MainClass.T c) {
+    private void checkMainClass(MainClass c) {
         MainClass.Singleton mainClass = (MainClass.Singleton) c;
         this.currentClass = mainClass.classId();
         // "main" method has an argument "arg" of type "String[]", but
@@ -222,7 +222,7 @@ public class Checker {
 
     // ////////////////////////////////////////////////////////
     // step 1: create class table for Main class
-    private void buildMainClass(MainClass.T main) {
+    private void buildMainClass(MainClass main) {
         // we do not put Main class into the class table.
         // so that no other class can inherit from it.
         // MainClass.Singleton mc = (MainClass.Singleton) main;
@@ -230,19 +230,19 @@ public class Checker {
     }
 
     // create class table for each normal class
-    private void buildClass(Class.T cls) {
+    private void buildClass(Class cls) {
         Class.Singleton c = (Class.Singleton) cls;
         this.classTable.putClass(c.classId(), c.extends_(), cls);
 
         // add all instance variables into the class table
-        for (Dec.T dec : c.decs()) {
+        for (Dec dec : c.decs()) {
             Dec.Singleton d = (Dec.Singleton) dec;
             this.classTable.putField(c.classId(),
                     d.aid(),
                     d.type());
         }
         // add all methods into the class table
-        for (Method.T method : c.methods()) {
+        for (Method method : c.methods()) {
             Method.Singleton m = (Method.Singleton) method;
             this.classTable.putMethod(c.classId(),
                     m.methodId(),
@@ -254,7 +254,7 @@ public class Checker {
         }
     }
 
-    private Program.T buildTable0(Program.T p) {
+    private Program buildTable0(Program p) {
         Program.Singleton prog = (Program.Singleton) p;
         // ////////////////////////////////////////////////
         // a class table maps a class name to its class binding:
@@ -264,8 +264,8 @@ public class Checker {
         return p;
     }
 
-    private Program.T buildTable(Program.T p) {
-        Trace<Program.T, Program.T> trace =
+    private Program buildTable(Program p) {
+        Trace<Program, Program> trace =
                 new Trace<>("checker.Checker.buildTable",
                         this::buildTable0,
                         p,
@@ -278,15 +278,15 @@ public class Checker {
         return trace.doit();
     }
 
-    private Program.T checkIt0(Program.T p) {
+    private Program checkIt0(Program p) {
         Program.Singleton prog = (Program.Singleton) p;
         checkMainClass(prog.mainClass());
         prog.classes().forEach(this::checkClass);
         return p;
     }
 
-    private Program.T checkIt(Program.T p) {
-        Trace<Program.T, Program.T> trace =
+    private Program checkIt(Program p) {
+        Trace<Program, Program> trace =
                 new Trace<>("checker.Checker.checkClass",
                         this::checkIt0,
                         p,
@@ -300,9 +300,9 @@ public class Checker {
     }
 
     // to check a program
-    private Program.T checkProgram(Program.T p) {
+    private Program checkProgram(Program p) {
         // pass 1: build the class table
-        Pass<Program.T, Program.T> buildTablePass =
+        Pass<Program, Program> buildTablePass =
                 new Pass<>("build class table",
                         this::buildTable,
                         p,
@@ -313,7 +313,7 @@ public class Checker {
         // ////////////////////////////////////////////////
         // pass 2: check each class in turn, under the class table
         // built above.
-        Pass<Program.T, Program.T> checkPass =
+        Pass<Program, Program> checkPass =
                 new Pass<>("check class",
                         this::checkIt,
                         p,
@@ -322,7 +322,7 @@ public class Checker {
         return p;
     }
 
-    public Ast.Program.T check(Program.T ast) {
+    public Ast.Program check(Program ast) {
         PrettyPrinter pp = new PrettyPrinter();
 
         var traceCheckProgram = new Trace<>(

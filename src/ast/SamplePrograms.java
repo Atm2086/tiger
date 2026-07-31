@@ -39,7 +39,7 @@ public class SamplePrograms {
      */
 
     // // main class: "Factorial"
-    static MainClass.T factorial = new MainClass.Singleton(
+    static MainClass factorial = new MainClass.Singleton(
             Id.newName("Factorial"),
             new AstId(Id.newName("a")),
             new Print(new Call(new NewObject(Id.newName("Fac")),
@@ -49,7 +49,7 @@ public class SamplePrograms {
                     new Tuple.One<>())));
 
     // // class "Fac"
-    static ast.Ast.Class.T fac = new ast.Ast.Class.Singleton(
+    static ast.Ast.Class fac = new ast.Ast.Class.Singleton(
             Id.newName("Fac"),
             null,
             List.of(), // arguments
@@ -77,7 +77,7 @@ public class SamplePrograms {
             new Tuple.One<>());
 
     // program
-    public static Program.T progFac = new Program.Singleton(factorial, List.of(fac));
+    public static Program progFac = new Program.Singleton(factorial, List.of(fac));
 
 
     // to encode "test/SumRec.java"
@@ -97,7 +97,7 @@ public class SamplePrograms {
 //            return sum;
 //        }
 //    }
-    static MainClass.T sumRec = new MainClass.Singleton(
+    static MainClass sumRec = new MainClass.Singleton(
             Id.newName("Factorial"),
             new AstId(Id.newName("n")),
             new Print(new Call(new NewObject(Id.newName("Doit")),
@@ -107,7 +107,7 @@ public class SamplePrograms {
                     new Tuple.One<>())));
 
     // // class "Doit"
-    static ast.Ast.Class.T doitSumRec = new ast.Ast.Class.Singleton(
+    static ast.Ast.Class doitSumRec = new ast.Ast.Class.Singleton(
             Id.newName("Doit"),
             null,
             List.of(),
@@ -135,13 +135,13 @@ public class SamplePrograms {
                     new ExpId(new AstId(Id.newName("sum"))))),
             new Tuple.One<>());
 
-    public static Program.T progSumRec = new Program.Singleton(sumRec, List.of(doitSumRec));
+    public static Program progSumRec = new Program.Singleton(sumRec, List.of(doitSumRec));
 
 
     // Lab2, exercise 2: you should write some code to
     // encode the program "test/Sum.java".
     // Your code here:
-    public static Program.T progSum = null;
+    public static Program progSum = null;
 
 
 }

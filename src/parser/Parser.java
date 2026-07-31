@@ -391,7 +391,7 @@ public class Parser {
     }
 
     // VarDecl -> Type id ;
-    private void parseVarDecl() throws Exception {
+    private void parseVarDecl()  {
         // to parse the "Type" non-terminal in this method,
         // instead of writing a fresh one.
         parseType();
@@ -401,7 +401,7 @@ public class Parser {
 
     // VarDecls -> VarDecl VarDecls
     // ->
-    private void parseVarDecls() throws Exception {
+    private void parseVarDecls()  {
         while (isVarDeclStart()) {
             parseVarDecl();
         }
@@ -423,7 +423,7 @@ public class Parser {
 
     // Method -> public Type id ( FormalList )
     // { VarDecl* Statement* return Exp ;}
-    private void parseMethod() throws Exception{
+    private void parseMethod() {
         // to parse a method.
         eatToken(Token.Kind.PUBLIC);
         parseType();
@@ -445,7 +445,7 @@ public class Parser {
 
     // MethodDecls -> MethodDecl MethodDecls
     // ->
-    private void parseMethodDecls() throws Exception{
+    private void parseMethodDecls() {
         while (FIRST_METHODDECLARATION.contains(current.kind)) {
             parseMethod();
         }
@@ -453,7 +453,7 @@ public class Parser {
 
     // ClassDecl -> class id { VarDecl* MethodDecl* }
     //           -> class id extends id { VarDecl* MethodDecl* }
-    private void parseClassDecl() throws Exception{
+    private void parseClassDecl() {
         eatToken(Token.Kind.CLASS);
         eatToken(Token.Kind.ID);
         if (current.kind.equals(Token.Kind.EXTENDS)) {
@@ -473,7 +473,7 @@ public class Parser {
 
     // ClassDecls -> ClassDecl ClassDecls
     //            ->
-    private void parseClassDecls() throws Exception{
+    private void parseClassDecls() {
         while (current.kind.equals(Token.Kind.CLASS)) {
             parseClassDecl();
         }
@@ -508,8 +508,7 @@ public class Parser {
     }
 
     // Program -> MainClass ClassDecl*
-    private Ast.Program.T parseProgram(Object obj) {
-    private void parseProgram() throws Exception{
+    private Ast.Program parseProgram(Object obj) {
         parseMainClass();
         parseClassDecls();
         eatToken(Token.Kind.EOF);
@@ -535,16 +534,15 @@ public class Parser {
         }
     }
 
-    public Ast.Program.T parse() {
-    public Object parse() throws Exception{
+    public Ast.Program parse() {
         initParser();
-        Trace<Object, Ast.Program.T> trace =
+        Trace<Object, Ast.Program> trace =
                 new Trace<>("parser.Parser.parse",
                         this::parseProgram,
                         this.inputFileName,
                         (s) -> System.out.println("parsing: " + s),
                         new PrettyPrinter()::ppProgram);
-        Ast.Program.T ast = trace.doit();
+        Ast.Program ast = trace.doit();
         finalizeParser();
         return ast;
     }
