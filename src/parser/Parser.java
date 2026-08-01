@@ -4,15 +4,18 @@ import ast.Ast;
 import ast.PrettyPrinter;
 import lexer.Lexer;
 import lexer.Token;
-import util.Todo;
+import util.Id;
 import util.Trace;
+import util.Tuple;
 
 import java.io.BufferedInputStream;
 import java.io.FileInputStream;
-import java.util.EnumSet;
-import java.util.Set;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 
 import static java.lang.System.exit;
 
@@ -34,9 +37,7 @@ public class Parser {
             );
     private static final Set<Token.Kind> FIRST_VARDECLARATION = FIRST_TYPE;
     private static final Set<Token.Kind> FIRST_METHODDECLARATION =
-            EnumSet.of(
-                    Token.Kind.PUBLIC
-            );
+            EnumSet.of(Token.Kind.PUBLIC);
     private static final Set<Token.Kind> FIRST_STATEMENT =
             EnumSet.of(
                     Token.Kind.LBRACE,
@@ -56,7 +57,6 @@ public class Parser {
                     Token.Kind.NOT,
                     Token.Kind.LPAREN
             );
-
 
     private boolean isVarDeclStart() {
         if (!FIRST_VARDECLARATION.contains(current.kind)) {
@@ -117,6 +117,22 @@ public class Parser {
         return result;
     }
 
+    private String currentLexeme() {
+        return current.lexeme.orElseThrow(
+                () -> new IllegalStateException(
+                        "token " + current.kind + " has no lexeme"
+                )
+        );
+    }
+
+    private Id currentId() {
+        if (current.kind != Token.Kind.ID) {
+            error("expected ID, but got " + current.kind);
+            return null;
+        }
+        return Id.newName(currentLexeme());
+    }
+
     private void eatToken(Token.Kind kind) {
         if (kind.equals(current.kind)) {
             advance();
@@ -143,14 +159,20 @@ public class Parser {
     // ExpList -> Exp ExpRest*
     // ->
     // ExpRest -> , Exp
-    private void parseExpList() {
-        if (current.kind.equals(Token.Kind.RPAREN))
-            return;
-        parseExp();
-        while (current.kind.equals(Token.Kind.COMMA)) {
-            advance();
-            parseExp();
+    private List<Ast.Exp> parseExpList() {
+        List<Ast.Exp> expressions = new ArrayList<>();
+
+        if (current.kind == Token.Kind.RPAREN) {
+            return expressions;
         }
+
+        expressions.add(parseExp());
+        while (current.kind == Token.Kind.COMMA) {
+            eatToken(Token.Kind.COMMA);
+            expressions.add(parseExp());
+        }
+
+        return expressions;
     }
 
     // AtomExp -> (exp)
@@ -161,48 +183,68 @@ public class Parser {
     //         -> id
     //         -> new int [exp]
     //         -> new id ()
-    private void parseAtomExp() {
+    private Ast.Exp parseAtomExp() {
         switch (current.kind) {
-            case LPAREN:
+            case LPAREN -> {
                 eatToken(Token.Kind.LPAREN);
-                parseExp();
+                Ast.Exp expression = parseExp();
                 eatToken(Token.Kind.RPAREN);
-                return;
-            case INTEGER_LITERAL:
-                eatToken(Token.Kind.INTEGER_LITERAL);
-                return;
-            case TRUE:
-                eatToken(Token.Kind.TRUE);
-                return;
-            case FALSE:
-                eatToken(Token.Kind.FALSE);
-                return;
-            case THIS:
-                eatToken(Token.Kind.THIS);
-                return;
-            case ID:
-                eatToken(Token.Kind.ID);
-                return;
-            case NEW: {
-                eatToken(Token.Kind.NEW);
-                switch (current.kind) {
-                    case INT:
-                        eatToken(Token.Kind.INT);
-                        eatToken(Token.Kind.LBRACKET);
-                        parseExp();
-                        eatToken(Token.Kind.RBRACKET);
-                        return;
-                    case ID:
-                        eatToken(Token.Kind.ID);
-                        eatToken(Token.Kind.LPAREN);
-                        eatToken(Token.Kind.RPAREN);
-                        return;
-                    default:
-                        error("expected an atomic expression, but got " + current.kind);
-                }
+                return expression;
             }
-            default:
+            case INTEGER_LITERAL -> {
+                int value;
+                try {
+                    value = Integer.parseInt(currentLexeme());
+                } catch (NumberFormatException exception) {
+                    error("integer literal is outside the range of int");
+                    return null;
+                }
+                eatToken(Token.Kind.INTEGER_LITERAL);
+                return new Ast.Exp.Num(value);
+            }
+            case TRUE -> {
+                eatToken(Token.Kind.TRUE);
+                return new Ast.Exp.True();
+            }
+            case FALSE -> {
+                eatToken(Token.Kind.FALSE);
+                return new Ast.Exp.False();
+            }
+            case THIS -> {
+                eatToken(Token.Kind.THIS);
+                return new Ast.Exp.This();
+            }
+            case ID -> {
+                Id id = currentId();
+                eatToken(Token.Kind.ID);
+                return new Ast.Exp.ExpId(new Ast.AstId(id));
+            }
+            case NEW -> {
+                eatToken(Token.Kind.NEW);
+
+                if (current.kind == Token.Kind.INT) {
+                    eatToken(Token.Kind.INT);
+                    eatToken(Token.Kind.LBRACKET);
+                    Ast.Exp size = parseExp();
+                    eatToken(Token.Kind.RBRACKET);
+                    return new Ast.Exp.NewIntArray(size);
+                }
+
+                if (current.kind == Token.Kind.ID) {
+                    Id classId = currentId();
+                    eatToken(Token.Kind.ID);
+                    eatToken(Token.Kind.LPAREN);
+                    eatToken(Token.Kind.RPAREN);
+                    return new Ast.Exp.NewObject(classId);
+                }
+
+                error("expected int or a class name after new");
+                return null;
+            }
+            default -> {
                 error("expected an atomic expression, but got " + current.kind);
+                return null;
+            }
         }
     }
 
@@ -210,90 +252,120 @@ public class Parser {
     //        -> AtomExp .id (expList)
     //        -> AtomExp [exp]
     //        -> AtomExp .length
-    private void parseNotExp() {
-        parseAtomExp();
-        switch (current.kind) {
-            case Token.Kind.DOT -> {
-                eatToken(Token.Kind.DOT);
-                switch (current.kind) {
-                    case Token.Kind.ID -> {
-                        eatToken(Token.Kind.ID);
-                        eatToken(Token.Kind.LPAREN);
-                        parseExpList();
-                        eatToken(Token.Kind.RPAREN);
-                    }
-                    case Token.Kind.LENGTH -> {
-                        eatToken(Token.Kind.LENGTH);
-                    }
-                }
-            }
-            case Token.Kind.LBRACKET -> {
+    private Ast.Exp parseNotExp() {
+        Ast.Exp expression = parseAtomExp();
+
+        while (current.kind == Token.Kind.DOT
+                || current.kind == Token.Kind.LBRACKET) {
+            if (current.kind == Token.Kind.LBRACKET) {
                 eatToken(Token.Kind.LBRACKET);
-                parseExp();
+                Ast.Exp index = parseExp();
                 eatToken(Token.Kind.RBRACKET);
+                expression = new Ast.Exp.ArraySelect(expression, index);
+                continue;
             }
+
+            eatToken(Token.Kind.DOT);
+            if (current.kind == Token.Kind.LENGTH) {
+                eatToken(Token.Kind.LENGTH);
+                expression = new Ast.Exp.Length(expression);
+                continue;
+            }
+
+            if (current.kind == Token.Kind.ID) {
+                Id methodId = currentId();
+                eatToken(Token.Kind.ID);
+                eatToken(Token.Kind.LPAREN);
+                List<Ast.Exp> arguments = parseExpList();
+                eatToken(Token.Kind.RPAREN);
+                expression = new Ast.Exp.Call(
+                        expression,
+                        new Ast.AstId(methodId),
+                        arguments,
+                        new Tuple.One<>(),
+                        new Tuple.One<>()
+                );
+                continue;
+            }
+
+            error("expected length or a method name after '.'");
+            return null;
         }
+
+        return expression;
     }
 
     // TimesExp -> ! TimesExp
     // -> NotExp
-    private void parseTimesExp() {
-        if (current.kind.equals(Token.Kind.NOT)) {
+    private Ast.Exp parseTimesExp() {
+        if (current.kind == Token.Kind.NOT) {
             eatToken(Token.Kind.NOT);
-            parseTimesExp();
-            return;
+            return new Ast.Exp.Uop("!", parseTimesExp());
         }
-        parseNotExp();
+        return parseNotExp();
     }
 
     // AddSubExp -> TimesExp * TimesExp
     //           -> TimesExp
-    private void parseAddSubExp() {
-        parseTimesExp();
-        while (current.kind.equals(Token.Kind.TIMES)) {
+    private Ast.Exp parseAddSubExp() {
+        Ast.Exp left = parseTimesExp();
+
+        while (current.kind == Token.Kind.TIMES) {
             eatToken(Token.Kind.TIMES);
-            parseTimesExp();
+            Ast.Exp right = parseTimesExp();
+            left = new Ast.Exp.Bop(left, "*", right);
         }
+        return left;
     }
 
     // LtExp -> AddSubExp + AddSubExp
     //       -> AddSubExp - AddSubExp
     //       -> AddSubExp
-    private void parseLtExp() {
-        parseAddSubExp();
-        while (current.kind.equals(Token.Kind.ADD) || current.kind.equals(Token.Kind.MINUS)) {
-            switch(current.kind) {
-                case Token.Kind.ADD -> {
-                    eatToken(Token.Kind.ADD);
-                }
+    private Ast.Exp parseLtExp() {
+        Ast.Exp left = parseAddSubExp();
 
-                case Token.Kind.MINUS -> {
-                    eatToken(Token.Kind.MINUS);
-                }
+        while (current.kind == Token.Kind.ADD
+                || current.kind == Token.Kind.MINUS) {
+            String operator;
+            if (current.kind == Token.Kind.ADD) {
+                operator = "+";
+                eatToken(Token.Kind.ADD);
+            } else {
+                operator = "-";
+                eatToken(Token.Kind.MINUS);
             }
-            parseAddSubExp();
+
+            Ast.Exp right = parseAddSubExp();
+            left = new Ast.Exp.Bop(left, operator, right);
         }
+        return left;
     }
 
     // AndExp -> LtExp < LtExp
     // -> LtExp
-    private void parseAndExp() {
-        parseLtExp();
-        if (current.kind.equals(Token.Kind.LT)) {
+    private Ast.Exp parseAndExp() {
+        Ast.Exp left = parseLtExp();
+
+        if (current.kind == Token.Kind.LT) {
             eatToken(Token.Kind.LT);
-            parseLtExp();
+            Ast.Exp right = parseLtExp();
+            left = new Ast.Exp.Bop(left, "<", right);
         }
+        return left;
     }
 
     // Exp -> AndExp && AndExp
     //     -> AndExp
     // 这些用了优先级
-    private void parseExp() {
-        parseAndExp();
-        while (current.kind.equals(Token.Kind.AND)) {
+    private Ast.Exp parseExp() {
+        Ast.Exp left = parseAndExp();
+
+        while (current.kind == Token.Kind.AND) {
             eatToken(Token.Kind.AND);
-            parseAndExp();
+            Ast.Exp right = parseAndExp();
+            left = new Ast.Exp.BopBool(left, "&&", right);
         }
+        return left;
     }
 
     // Statement -> { Statement* }
@@ -302,181 +374,230 @@ public class Parser {
     // -> System.out.println ( Exp ) ;
     // -> id = Exp ;
     // -> id [ Exp ]= Exp ;
-    private void parseStatement() {
-        // to parse a statement.
+    private Ast.Stm parseStatement() {
         switch (current.kind) {
-            case Token.Kind.LBRACE -> {
+            case LBRACE -> {
                 eatToken(Token.Kind.LBRACE);
-                parseStatements();
+                List<Ast.Stm> statements = parseStatements();
                 eatToken(Token.Kind.RBRACE);
+                return new Ast.Stm.Block(statements);
             }
-            case Token.Kind.IF -> {
+            case IF -> {
                 eatToken(Token.Kind.IF);
                 eatToken(Token.Kind.LPAREN);
-                parseExp();
+                Ast.Exp condition = parseExp();
                 eatToken(Token.Kind.RPAREN);
-                parseStatement();
+                Ast.Stm thenBranch = parseStatement();
                 eatToken(Token.Kind.ELSE);
-                parseStatement();
+                Ast.Stm elseBranch = parseStatement();
+                return new Ast.Stm.If(condition, thenBranch, elseBranch);
             }
-            case Token.Kind.WHILE -> {
+            case WHILE -> {
                 eatToken(Token.Kind.WHILE);
                 eatToken(Token.Kind.LPAREN);
-                parseExp();
+                Ast.Exp condition = parseExp();
                 eatToken(Token.Kind.RPAREN);
-                parseStatement();
+                Ast.Stm body = parseStatement();
+                return new Ast.Stm.While(condition, body);
             }
-            case Token.Kind.SYSTEM -> {
+            case SYSTEM -> {
                 eatToken(Token.Kind.SYSTEM);
                 eatToken(Token.Kind.DOT);
                 eatToken(Token.Kind.OUT);
                 eatToken(Token.Kind.DOT);
                 eatToken(Token.Kind.PRINTLN);
                 eatToken(Token.Kind.LPAREN);
-                parseExp();
+                Ast.Exp expression = parseExp();
                 eatToken(Token.Kind.RPAREN);
                 eatToken(Token.Kind.SEMICOLON);
+                return new Ast.Stm.Print(expression);
             }
-            case Token.Kind.ID -> {
+            case ID -> {
+                Ast.AstId astId = new Ast.AstId(currentId());
                 eatToken(Token.Kind.ID);
-                if (current.kind.equals(Token.Kind.ASSIGN)) {
+
+                if (current.kind == Token.Kind.ASSIGN) {
                     eatToken(Token.Kind.ASSIGN);
-                }else {
+                    Ast.Exp expression = parseExp();
+                    eatToken(Token.Kind.SEMICOLON);
+                    return new Ast.Stm.Assign(astId, expression);
+                }
+
+                if (current.kind == Token.Kind.LBRACKET) {
                     eatToken(Token.Kind.LBRACKET);
-                    parseExp();
+                    Ast.Exp index = parseExp();
                     eatToken(Token.Kind.RBRACKET);
                     eatToken(Token.Kind.ASSIGN);
+                    Ast.Exp expression = parseExp();
+                    eatToken(Token.Kind.SEMICOLON);
+                    return new Ast.Stm.AssignArray(astId, index, expression);
                 }
-                parseExp();
-                eatToken(Token.Kind.SEMICOLON);
+
+                error("expected '=' or '[' after an identifier");
+                return null;
             }
             default -> {
-                error("wrong token in STATEMENT");
+                error("wrong token in Statement: " + current.kind);
+                return null;
             }
         }
     }
 
-    // Statements -> Statement Statements
-    // ->
-    private void parseStatements() {
+    private List<Ast.Stm> parseStatements() {
+        List<Ast.Stm> statements = new ArrayList<>();
         while (isStatementStart()) {
-            parseStatement();
+            statements.add(parseStatement());
         }
+        return statements;
     }
 
     // Type -> int []
     // -> boolean
     // -> int
     // -> id
-    private void parseType() {
-        // to parse a type.
+    private Ast.Type parseType() {
         switch (current.kind) {
-            case Token.Kind.INT -> {
+            case INT -> {
                 eatToken(Token.Kind.INT);
-                if (current.kind.equals(Token.Kind.LBRACKET)) {
+                if (current.kind == Token.Kind.LBRACKET) {
                     eatToken(Token.Kind.LBRACKET);
                     eatToken(Token.Kind.RBRACKET);
+                    return Ast.Type.getIntArray();
                 }
+                return Ast.Type.getInt();
             }
-            case Token.Kind.BOOLEAN -> {
+            case BOOLEAN -> {
                 eatToken(Token.Kind.BOOLEAN);
+                return Ast.Type.getBool();
             }
-            case Token.Kind.ID -> {
+            case ID -> {
+                Id classId = currentId();
                 eatToken(Token.Kind.ID);
+                return Ast.Type.getClassType(classId);
             }
             default -> {
-                error("wrong token in TYPE");
+                error("wrong token in Type: " + current.kind);
+                return null;
             }
         }
     }
 
     // VarDecl -> Type id ;
-    private void parseVarDecl()  {
-        // to parse the "Type" non-terminal in this method,
-        // instead of writing a fresh one.
-        parseType();
+    private Ast.Dec parseVarDecl() {
+        Ast.Type type = parseType();
+        Id id = currentId();
         eatToken(Token.Kind.ID);
         eatToken(Token.Kind.SEMICOLON);
+        return new Ast.Dec.Singleton(type, new Ast.AstId(id));
     }
 
-    // VarDecls -> VarDecl VarDecls
-    // ->
-    private void parseVarDecls()  {
+    private List<Ast.Dec> parseVarDecls() {
+        List<Ast.Dec> declarations = new ArrayList<>();
         while (isVarDeclStart()) {
-            parseVarDecl();
+            declarations.add(parseVarDecl());
         }
+        return declarations;
     }
 
     // FormalList -> Type id FormalRest*
     // ->
     // FormalRest -> , Type id
-    // 用在methoddeclaration里的一串
-    private void parseFormalList() {
-        parseType();
+    private List<Ast.Dec> parseFormalList() {
+        List<Ast.Dec> formals = new ArrayList<>();
+
+        Ast.Type firstType = parseType();
+        Id firstId = currentId();
         eatToken(Token.Kind.ID);
-        while (current.kind.equals(Token.Kind.COMMA)) {
+        formals.add(new Ast.Dec.Singleton(firstType, new Ast.AstId(firstId)));
+
+        while (current.kind == Token.Kind.COMMA) {
             eatToken(Token.Kind.COMMA);
-            parseType();
+            Ast.Type type = parseType();
+            Id id = currentId();
             eatToken(Token.Kind.ID);
+            formals.add(new Ast.Dec.Singleton(type, new Ast.AstId(id)));
         }
+
+        return formals;
     }
 
     // Method -> public Type id ( FormalList )
     // { VarDecl* Statement* return Exp ;}
-    private void parseMethod() {
-        // to parse a method.
+    private Ast.Method parseMethod() {
         eatToken(Token.Kind.PUBLIC);
-        parseType();
+        Ast.Type returnType = parseType();
+        Id methodId = currentId();
         eatToken(Token.Kind.ID);
         eatToken(Token.Kind.LPAREN);
+
+        List<Ast.Dec> formals;
         if (FIRST_TYPE.contains(current.kind)) {
-            parseFormalList();
+            formals = parseFormalList();
+        } else {
+            formals = new ArrayList<>();
         }
+
         eatToken(Token.Kind.RPAREN);
         eatToken(Token.Kind.LBRACE);
-        // 这里可能会出现L2上的区分了，因为 vardecls 含 id开头的，statement也要含id，那么对于id时候应该走哪条线就有问题
-        parseVarDecls();
-        parseStatements();
+        List<Ast.Dec> locals = parseVarDecls();
+        List<Ast.Stm> statements = parseStatements();
         eatToken(Token.Kind.RETURN);
-        parseExp();
+        Ast.Exp returnExpression = parseExp();
         eatToken(Token.Kind.SEMICOLON);
         eatToken(Token.Kind.RBRACE);
+
+        return new Ast.Method.Singleton(
+                returnType,
+                new Ast.AstId(methodId),
+                formals,
+                locals,
+                statements,
+                returnExpression
+        );
     }
 
-    // MethodDecls -> MethodDecl MethodDecls
-    // ->
-    private void parseMethodDecls() {
+    private List<Ast.Method> parseMethodDecls() {
+        List<Ast.Method> methods = new ArrayList<>();
         while (FIRST_METHODDECLARATION.contains(current.kind)) {
-            parseMethod();
+            methods.add(parseMethod());
         }
+        return methods;
     }
 
     // ClassDecl -> class id { VarDecl* MethodDecl* }
     //           -> class id extends id { VarDecl* MethodDecl* }
-    private void parseClassDecl() {
+    private Ast.Class parseClassDecl() {
         eatToken(Token.Kind.CLASS);
+        Id classId = currentId();
         eatToken(Token.Kind.ID);
-        if (current.kind.equals(Token.Kind.EXTENDS)) {
-            advance();
+
+        Id parentId = null;
+        if (current.kind == Token.Kind.EXTENDS) {
+            eatToken(Token.Kind.EXTENDS);
+            parentId = currentId();
             eatToken(Token.Kind.ID);
         }
+
         eatToken(Token.Kind.LBRACE);
-
-        // 这里对 VarDecl 和 MethodDecl 有 LL1 的判别，所以这里应该没问题
-
-        parseVarDecls();
-        parseMethodDecls();
-
+        List<Ast.Dec> declarations = parseVarDecls();
+        List<Ast.Method> methods = parseMethodDecls();
         eatToken(Token.Kind.RBRACE);
 
+        return new Ast.Class.Singleton(
+                classId,
+                parentId,
+                declarations,
+                methods,
+                new Tuple.One<>()
+        );
     }
 
-    // ClassDecls -> ClassDecl ClassDecls
-    //            ->
-    private void parseClassDecls() {
-        while (current.kind.equals(Token.Kind.CLASS)) {
-            parseClassDecl();
+    private List<Ast.Class> parseClassDecls() {
+        List<Ast.Class> classes = new ArrayList<>();
+        while (current.kind == Token.Kind.CLASS) {
+            classes.add(parseClassDecl());
         }
+        return classes;
     }
 
     // MainClass -> class id {
@@ -484,11 +605,9 @@ public class Parser {
     //     Statement
     //   }
     // }
-    private void parseMainClass() {
-        // Lab 1. Exercise 11: Fill in the missing code
-        // to parse a main class as described by the
-        // grammar above.
+    private Ast.MainClass parseMainClass() {
         eatToken(Token.Kind.CLASS);
+        Id classId = currentId();
         eatToken(Token.Kind.ID);
         eatToken(Token.Kind.LBRACE);
         eatToken(Token.Kind.PUBLIC);
@@ -499,36 +618,47 @@ public class Parser {
         eatToken(Token.Kind.STRING);
         eatToken(Token.Kind.LBRACKET);
         eatToken(Token.Kind.RBRACKET);
+
+        Id argumentId = currentId();
         eatToken(Token.Kind.ID);
+
         eatToken(Token.Kind.RPAREN);
         eatToken(Token.Kind.LBRACE);
-        parseStatement();
+        Ast.Stm statement = parseStatement();
         eatToken(Token.Kind.RBRACE);
         eatToken(Token.Kind.RBRACE);
+
+        return new Ast.MainClass.Singleton(
+                classId,
+                new Ast.AstId(argumentId),
+                statement
+        );
     }
 
     // Program -> MainClass ClassDecl*
-    private Ast.Program parseProgram(Object obj) {
-        parseMainClass();
-        parseClassDecls();
+    private Ast.Program parseProgram(Object ignored) {
+        Ast.MainClass mainClass = parseMainClass();
+        List<Ast.Class> classes = parseClassDecls();
         eatToken(Token.Kind.EOF);
-        return null;
+        return new Ast.Program.Singleton(mainClass, classes);
     }
 
     private void initParser() {
         try {
-            this.inputStream = new BufferedInputStream(new FileInputStream(this.inputFileName));
+            inputStream = new BufferedInputStream(
+                    new FileInputStream(inputFileName)
+            );
         } catch (Exception e) {
-            error("unable to open file" + this.inputFileName);
+            error("unable to open file " + inputFileName);
         }
 
-        this.lexer = new Lexer(this.inputFileName, this.inputStream);
-        this.current = lexer.nextToken();
+        lexer = new Lexer(inputFileName, inputStream);
+        current = lexer.nextToken();
     }
 
     private void finalizeParser() {
         try {
-            this.inputStream.close();
+            inputStream.close();
         } catch (Exception e) {
             error("unable to close file");
         }
@@ -537,11 +667,13 @@ public class Parser {
     public Ast.Program parse() {
         initParser();
         Trace<Object, Ast.Program> trace =
-                new Trace<>("parser.Parser.parse",
+                new Trace<>(
+                        "parser.Parser.parse",
                         this::parseProgram,
-                        this.inputFileName,
-                        (s) -> System.out.println("parsing: " + s),
-                        new PrettyPrinter()::ppProgram);
+                        inputFileName,
+                        s -> System.out.println("parsing: " + s),
+                        new PrettyPrinter()::ppProgram
+                );
         Ast.Program ast = trace.doit();
         finalizeParser();
         return ast;
