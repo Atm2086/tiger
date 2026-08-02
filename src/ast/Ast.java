@@ -153,7 +153,7 @@ public class Ast {
         }
 
         // Call
-        public record Call(Exp exp,
+        public record Call(Exp exp,  // 接收者对象表达式，点号左边的exp
                            AstId methodId,
                            List<Exp> args,
                            // type of object "exp"
