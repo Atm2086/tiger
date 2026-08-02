@@ -3,7 +3,6 @@ package checker;
 import ast.Ast;
 import ast.Ast.Type;
 import util.Id;
-import util.Todo;
 import util.Tuple;
 
 import java.util.HashMap;
@@ -35,8 +34,8 @@ public class ClassTable {
     // the binding for a class
     public record Binding(
             // null for empty extends
-            Id extends_,
-            Ast.Class self,
+            Id extends_, // 父类
+            Ast.Class self, // 自己的AST树
             // the field in a class: its type and fresh id
             java.util.HashMap<Id, Tuple.Two<Type, Id>> fields,
             // the method in a class: its type and fresh id
@@ -69,6 +68,7 @@ public class ClassTable {
     }
 
     // map each class, to its corresponding class binding.
+    // 这个是主要的成员
     private final java.util.HashMap<Id, Binding> classTable;
 
     public ClassTable() {
@@ -140,7 +140,76 @@ public class ClassTable {
 
     // lab 2, exercise 7:
     public void dump() {
-        throw new Todo();
+        System.out.println("ClassTable:");
+
+        if (this.classTable.isEmpty()) {
+            System.out.println("  <empty>");
+            return;
+        }
+
+        this.classTable.entrySet().stream()
+                .sorted((left, right) -> left.getKey().toString()
+                        .compareTo(right.getKey().toString()))
+                .forEach(classEntry -> {
+                    Id classId = classEntry.getKey();
+                    Binding binding = classEntry.getValue();
+
+                    System.out.println("  class " + classId);
+                    System.out.println("    extends: "
+                            + Objects.requireNonNullElse(binding.extends_(), "<none>"));
+
+                    System.out.println("    fields:");
+                    if (binding.fields().isEmpty()) {
+                        System.out.println("      <empty>");
+                    } else {
+                        binding.fields().entrySet().stream()
+                                .sorted((left, right) -> left.getKey().toString()
+                                        .compareTo(right.getKey().toString()))
+                                .forEach(fieldEntry -> {
+                                    Tuple.Two<Type, Id> field = fieldEntry.getValue();
+                                    System.out.println("      " + fieldEntry.getKey()
+                                            + " : " + formatType(field.first())
+                                            + " (fresh: " + field.second() + ")");
+                                });
+                    }
+
+                    System.out.println("    methods:");
+                    if (binding.methods().isEmpty()) {
+                        System.out.println("      <empty>");
+                    } else {
+                        binding.methods().entrySet().stream()
+                                .sorted((left, right) -> left.getKey().toString()
+                                        .compareTo(right.getKey().toString()))
+                                .forEach(methodEntry -> {
+                                    Tuple.Two<MethodType, Id> method = methodEntry.getValue();
+                                    System.out.println("      " + methodEntry.getKey()
+                                            + " : " + formatMethodType(method.first())
+                                            + " (fresh: " + method.second() + ")");
+                                });
+                    }
+                });
+    }
+
+    static String formatType(Type type) {
+        return switch (type) {
+            case Type.Boolean() -> "boolean";
+            case Type.ClassType(Id id) -> id.toString();
+            case Type.Int() -> "int";
+            case Type.IntArray() -> "int[]";
+        };
+    }
+
+    private static String formatMethodType(MethodType methodType) {
+        StringBuilder result = new StringBuilder("(");
+        for (int i = 0; i < methodType.argsType().size(); i++) {
+            if (i > 0) {
+                result.append(", ");
+            }
+            result.append(formatType(methodType.argsType().get(i)));
+        }
+        result.append(") -> ");
+        result.append(formatType(methodType.retType()));
+        return result.toString();
     }
 
     @Override
@@ -148,7 +217,6 @@ public class ClassTable {
         return this.classTable.toString();
     }
 }
-
 
 
 

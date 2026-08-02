@@ -299,7 +299,7 @@ public class Checker {
         return trace.doit();
     }
 
-    // to check a program
+    // to check a program， 分了两个pass来解决
     private Program checkProgram(Program p) {
         // pass 1: build the class table
         Pass<Program, Program> buildTablePass =
@@ -311,8 +311,7 @@ public class Checker {
 
 
         // ////////////////////////////////////////////////
-        // pass 2: check each class in turn, under the class table
-        // built above.
+        // pass 2: check each class in turn, under the class table built above.
         Pass<Program, Program> checkPass =
                 new Pass<>("check class",
                         this::checkIt,

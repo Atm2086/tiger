@@ -4,7 +4,6 @@ import ast.Ast;
 import ast.Ast.Dec;
 import ast.Ast.Type;
 import util.Id;
-import util.Todo;
 import util.Tuple;
 
 import java.util.List;
@@ -51,7 +50,22 @@ public class MethodTable {
 
     // lab 2, exercise 7:
     public void dump() {
-        throw new Todo();
+        System.out.println("MethodTable:");
+
+        if (this.table.isEmpty()) {
+            System.out.println("  <empty>");
+            return;
+        }
+
+        this.table.entrySet().stream()
+                .sorted((left, right) -> left.getKey().toString()
+                        .compareTo(right.getKey().toString()))
+                .forEach(entry -> {
+                    Tuple.Two<Type, Id> binding = entry.getValue();
+                    System.out.println("  " + entry.getKey()
+                            + " : " + ClassTable.formatType(binding.first())
+                            + " (fresh: " + binding.second() + ")");
+                });
     }
 
     @Override
