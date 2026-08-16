@@ -13,7 +13,7 @@ import java.util.List;
 
 // two sample programs.
 public class SamplePrograms {
-    public static Stm.T sample1 = new Compound(
+    public static Stm sample1 = new Compound(
             new Assign("a", new Op(new Num(5), "+", new Num(3))),
             new Compound(
                     new Assign("b", new Eseq(new Print(List.of(
@@ -24,5 +24,11 @@ public class SamplePrograms {
 
     // lab 1, exercise 3:
     // replace the "null" with your code:
-    public static Stm.T sample2 = null;
+    public static Stm sample2 = new Compound(
+            new Assign("a", new Num(1)),
+            new Compound(
+                    new Assign("b", new Num(2)),
+                    new Print(List.of(new Op(new Id("a"), "/", new Id("b"))))
+            )
+    );
 }

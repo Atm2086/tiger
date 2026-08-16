@@ -1,0 +1,3 @@
+# 测试
+
+java -cp build/libs/tiger-1.0.jar Tiger -dump classtable -dump methodtable <inputFile>

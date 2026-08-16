@@ -63,6 +63,11 @@ public class CommandLine {
                         (Object x) -> {
                             switch ((String) x) {
                                 case "token" -> Control.Lexer.dumpToken = true;
+                                case "type" ->  Control.Type.dump = true;
+                                case "classtable" ->
+                                        Control.Type.dumpClassTable = true;
+                                case "methodtable" ->
+                                        Control.Type.dumpMethodTable = true;
                                 default -> error("unknown argument: " + x);
                             }
                         }),

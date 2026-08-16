@@ -31,7 +31,7 @@ public class Control {
 
     // this is a special hack to test the compiler
     // without hacking the lexer and parser.
-    public static Ast.Program.T bultinAst = null;
+    public static Ast.Program bultinAst = null;
 
     // dot-related
     public static class Dot {
@@ -71,5 +71,7 @@ public class Control {
     public static class X64 {
         public static boolean embedComment = false;
         public static boolean dump = false;
+        public static boolean dumpClassTable = false;
+        public static boolean dumpMethodTable = false;
     }
 }
