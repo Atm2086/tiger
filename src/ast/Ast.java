@@ -1,7 +1,6 @@
 package ast;
 
 import util.Id;
-import util.Todo;
 import util.Tuple;
 
 import java.util.HashMap;
@@ -32,9 +31,13 @@ public class Ast {
     }
 
     //  ///////////////////////////////////////////////////////////
-    //  type
+    //  type 新增错误类型，用于错误类型向上层传播，避免空指针和连锁误报。
     public sealed interface Type
-                permits Type.Boolean, Type.ClassType, Type.Int, Type.IntArray {
+                permits Type.Boolean, Type.ClassType, Type.Error, Type.Int, Type.IntArray {
+        
+        // Error
+        public record Error() implements Type {
+        }
 
         // boolean
         public record Boolean() implements Type {
@@ -54,6 +57,7 @@ public class Ast {
 
         // singleton design pattern
         Type boolTy = new Type.Boolean();
+        Type errorTy = new Type.Error();
         Type intTy = new Type.Int();
         Type intArrayTy = new Type.IntArray();
         HashMap<Id, Type> classTyContainer = new HashMap<>();
@@ -64,6 +68,10 @@ public class Ast {
 
         public static Type getBool() {
             return boolTy;
+        }
+
+        public static Type getError() {
+            return errorTy;
         }
 
         public static Type getIntArray() {
@@ -88,8 +96,10 @@ public class Ast {
         public static void output(Type ty) {
             switch (ty) {
                 case Type.Boolean() -> System.out.println("boolean");
+                case Type.ClassType(Id id) -> System.out.print(id);
+                case Type.Error() -> System.out.print("<error>");
                 case Type.Int() -> System.out.print("int");
-                default -> throw new Todo();
+                case Type.IntArray() -> System.out.print("int[]");
             }
         }
 
@@ -98,10 +108,18 @@ public class Ast {
                 case Type.Boolean() -> {
                     return "boolean";
                 }
+                case Type.ClassType(Id id) -> {
+                    return id.toString();
+                }
+                case Type.Error() -> {
+                    return "<error>";
+                }
                 case Type.Int() -> {
                     return "int";
                 }
-                default -> throw new Todo();
+                case Type.IntArray() -> {
+                    return "int[]";
+                }
             }
         }
     }

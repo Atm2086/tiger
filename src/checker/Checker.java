@@ -7,8 +7,8 @@ import ast.PrettyPrinter;
 import control.Control;
 import util.*;
 
+import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 
 public class Checker {
     // symbol table for all classes
@@ -17,23 +17,56 @@ public class Checker {
     private MethodTable methodTable;
     // the class name being checked
     private Id currentClass;
+    // 关联当前AST节点记录错误
+    private final ErrorReporter errorReporter;
 
     public Checker() {
         this.classTable = new ClassTable();
         this.methodTable = new MethodTable();
         this.currentClass = null;
+        this.errorReporter = new ErrorReporter();
     }
 
-    private void error(String s) {
-        System.out.println("Error: type mismatch: " + s);
-        System.exit(1);
+
+    // 两种report
+    private void error(Object node, String message) {
+        this.errorReporter.report(node, message);
     }
 
-    private void error(String s, Type expected, Type got) {
-        System.out.println("Error: type mismatch: " + s);
-        Type.output(expected);
-        Type.output(got);
-        System.exit(1);
+    private void error(Object node,
+                       String message,
+                       Type expected,
+                       Type got) {
+        this.errorReporter.report(node, message, expected, got);
+    }
+
+    private boolean isError(Type type) {
+        return type instanceof Type.Error;
+    }
+
+    private boolean isAssignable(Type actual, Type expected) {
+        if (!Type.nonEquals(actual, expected)) {
+            return true;
+        }
+
+        if (!(actual instanceof Type.ClassType(Id actualClassId))
+                || !(expected instanceof Type.ClassType(Id expectedClassId))) {
+            return false;
+        }
+
+        HashSet<Id> visited = new HashSet<>();
+        while (actualClassId != null && visited.add(actualClassId)) {
+            if (actualClassId == expectedClassId) {
+                return true;
+            }
+            ClassTable.Binding binding =
+                    this.classTable.getClass_(actualClassId);
+            if (binding == null) {
+                return false;
+            }
+            actualClassId = binding.extends_();
+        }
+        return false;
     }
 
     // /////////////////////////////////////////////////////
@@ -45,15 +78,21 @@ public class Checker {
         Tuple.Two<Ast.Type, Id> resultId = this.methodTable.get(aid.id);
         // not a local or formal
         if (resultId == null) {
-            isClassField = true;
-            resultId = this.classTable.getField(this.currentClass, aid.id);
+            ClassTable.Binding currentBinding =
+                    this.classTable.getClass_(this.currentClass);
+            if (currentBinding != null) {
+                resultId = this.classTable.getField(this.currentClass, aid.id);
+                isClassField = resultId != null;
+            }
         }
         if (resultId == null) {
-            error("id");
+            error(aid, "undefined identifier: " + aid.id);
+            aid.type = Type.getError();
+            return Type.getError();
         }
-        assert resultId != null;
         // set up the fresh
         aid.freshId = resultId.second();
+        aid.type = resultId.first();
         aid.isClassField = isClassField;
         return resultId.first();
     }
@@ -71,31 +110,68 @@ public class Checker {
                     Tuple.One<Id> calleeTy, // 保存接收者对象所属的类
                     Tuple.One<Type> retTy  // 保存方法返回类型
             ) -> {
+                Type objectType = checkExp(theObject);
+                List<Type> actualTypes =
+                        args.stream().map(this::checkExp).toList();
 
-                var typeOfTheObject = checkExp(theObject); // 就是点号左边返回的类型
+                if (isError(objectType)) {
+                    return Type.getError();
+                }
+                if (!(objectType instanceof Type.ClassType(Id calleeClassId))) {
+                    error(e, "method call requires an object type");
+                    return Type.getError();
+                }
+                if (this.classTable.getClass_(calleeClassId) == null) {
+                    error(e, "undefined class: " + calleeClassId);
+                    return Type.getError();
+                }
 
-                Id calleeClassId = null;
-                // 检查typeOfTheObject是否为null，不是null就看是不是合法类型
-                if (Objects.requireNonNull(typeOfTheObject) instanceof Type.ClassType(Id calleeClassId_)) {
-                    calleeClassId = calleeClassId_;
-                    // put the return type onto the AST
-                    // 回填，因为构建ast的时候是正向的，返回类型未知，所以要回填
-                    calleeTy.set(calleeClassId);
+                Tuple.Two<ClassTable.MethodType, Id> methodBinding =
+                        this.classTable.getMethod(calleeClassId, methodId.id);
+                if (methodBinding == null) {
+                    error(e, "method not found: "
+                            + calleeClassId + "." + methodId.id);
+                    return Type.getError();
                 }
-                var resultMethodId = this.classTable.getMethod(calleeClassId, methodId.id);
-                if (resultMethodId == null) {
-                    error("method not found: " + calleeClassId + "." + methodId);
+
+                ClassTable.MethodType methodType = methodBinding.first();
+                List<Type> formalTypes = methodType.argsType();
+                if (actualTypes.size() != formalTypes.size()) {
+                    error(e, "wrong number of arguments for method "
+                            + methodId.id + ": expected " + formalTypes.size()
+                            + ", actual " + actualTypes.size());
                 }
-                var resultArgs = args.stream().map(this::checkExp).toList();
-                assert resultMethodId != null;
-                methodId.freshId = resultMethodId.second();
-                Ast.Type retType = resultMethodId.first().retType();
-                // put the return type onto the AST
-                retTy.set(retType);
-                return retType;
+
+                int count = Math.min(actualTypes.size(), formalTypes.size());
+                boolean hasArgumentError = false;
+                for (int i = 0; i < count; i++) {
+                    Type actualType = actualTypes.get(i);
+                    Type formalType = formalTypes.get(i);
+                    if (!isError(actualType)
+                            && !isAssignable(actualType, formalType)) {
+                        error(e, "argument " + (i + 1)
+                                        + " of method " + methodId.id
+                                        + " has the wrong type",
+                                formalType,
+                                actualType);
+                        hasArgumentError = true;
+                    }
+                }
+
+                calleeTy.set(calleeClassId);
+                methodId.freshId = methodBinding.second();
+                retTy.set(methodType.retType());
+                if (hasArgumentError
+                        || actualTypes.size() != formalTypes.size()) {
+                    return Type.getError();
+                }
+                return methodType.retType();
             }
             case Exp.NewObject(Id classId) -> {
-                var classBinding = this.classTable.getClass_(classId);
+                if (this.classTable.getClass_(classId) == null) {
+                    error(e, "undefined class: " + classId);
+                    return Type.getError();
+                }
                 return Type.getClassType(classId);
             }
             case Exp.Num(int n) -> {
@@ -108,46 +184,77 @@ public class Checker {
             ) -> {
                 var resultLeft = checkExp(left);
                 var resultRight = checkExp(right);
+                
+                // 二元运算，子错误向上直接传递
+                if (isError(resultLeft) || isError(resultRight)) {
+                    return Type.getError();
+                }
 
                 switch (bop) {
                     case "+", "-" -> {
                         if (Type.nonEquals(resultLeft, Type.getInt()) ||
                                 Type.nonEquals(resultRight, Type.getInt())) {
-                            error(bop);
+                            Type actual = Type.nonEquals(resultLeft, Type.getInt())
+                                    ? resultLeft : resultRight;
+                            error(e, bop + " requires integer operands",
+                                    Type.getInt(), actual);
+                            return Type.getError();
                         }
                         return Type.getInt();
                     }
                     case "*" -> {
                         if (Type.nonEquals(resultLeft, Type.getInt()) ||
                                 Type.nonEquals(resultRight, Type.getInt())) {
-                            error("*");
+                            Type actual = Type.nonEquals(resultLeft, Type.getInt())
+                                    ? resultLeft : resultRight;
+                            error(e, "* requires integer operands",
+                                    Type.getInt(), actual);
+                            return Type.getError();
                         }
                         return Type.getInt();
                     }
                     case "<" -> {
                         if (Type.nonEquals(resultLeft, Type.getInt()) ||
                                 Type.nonEquals(resultRight, Type.getInt())) {
-                            error("<");
+                            Type actual = Type.nonEquals(resultLeft, Type.getInt())
+                                    ? resultLeft : resultRight;
+                            error(e, "< requires integer operands",
+                                    Type.getInt(), actual);
+                            return Type.getError();
                         }
                         return Type.getBool();
                     }
-                    default -> throw new Todo();
+                    default -> {
+                        error(e, "unknown binary operator: " + bop);
+                        return Type.getError();
+                    }
                 }
             }
             case Exp.ExpId(AstId aid) -> {
                 return checkAstId(aid);
             }
             case Exp.This() -> {
+                if (this.classTable.getClass_(this.currentClass) == null) {
+                    error(e, "this cannot be used in the static main method");
+                    return Type.getError();
+                }
                 return Type.getClassType(this.currentClass);
             }
             case Exp.ArraySelect(Exp array, Exp index) -> {
                 Type arrayType = checkExp(array);
                 Type indexType = checkExp(index);
+                if (isError(arrayType) || isError(indexType)) {
+                    return Type.getError();
+                }
                 if (Type.nonEquals(arrayType, Type.getIntArray())) {
-                    error("array selection requires an int[]");
+                    error(e, "array selection requires an int[]",
+                            Type.getIntArray(), arrayType);
+                    return Type.getError();
                 }
                 if (Type.nonEquals(indexType, Type.getInt())) {
-                    error("array index requires an integer");
+                    error(e, "array index requires an integer",
+                            Type.getInt(), indexType);
+                    return Type.getError();
                 }
                 return Type.getInt();
             }
@@ -156,12 +263,20 @@ public class Checker {
             case Exp.BopBool(Exp left, String bop, Exp right) -> {
                 Type leftType = checkExp(left);
                 Type rightType = checkExp(right);
+                if (isError(leftType) || isError(rightType)) {
+                    return Type.getError();
+                }
                 if (!bop.equals("&&")) {
-                    throw new Todo();
+                    error(e, "unknown boolean operator: " + bop);
+                    return Type.getError();
                 }
                 if (Type.nonEquals(leftType, Type.getBool())
                         || Type.nonEquals(rightType, Type.getBool())) {
-                    error("&&");
+                    Type actual = Type.nonEquals(leftType, Type.getBool())
+                            ? leftType : rightType;
+                    error(e, "&& requires boolean operands",
+                            Type.getBool(), actual);
+                    return Type.getError();
                 }
                 return Type.getBool();
             }
@@ -173,31 +288,50 @@ public class Checker {
             }
             case Exp.Uop(String op, Exp exp) -> {
                 Type expType = checkExp(exp);
+                if (isError(expType)) {
+                    return Type.getError();
+                }
                 if (!op.equals("!")) {
-                    throw new Todo();
+                    error(e, "unknown unary operator: " + op);
+                    return Type.getError();
                 }
                 if (Type.nonEquals(expType, Type.getBool())) {
-                    error("!");
+                    error(e, "! requires a boolean operand",
+                            Type.getBool(), expType);
+                    return Type.getError();
                 }
                 return Type.getBool();
             }
 
             case Exp.Length(Exp array) -> {
                 Type arrayType = checkExp(array);
+                if (isError(arrayType)) {
+                    return Type.getError();
+                }
                 if (Type.nonEquals(arrayType, Type.getIntArray())) {
-                    error("length requires an int[]");
+                    error(e, "length requires an int[]",
+                            Type.getIntArray(), arrayType);
+                    return Type.getError();
                 }
                 return Type.getInt();
             }
             case Exp.NewIntArray(Exp size) -> {
                 Type sizeType = checkExp(size);
+                if (isError(sizeType)) {
+                    return Type.getError();
+                }
                 if (Type.nonEquals(sizeType, Type.getInt())) {
-                    error("array size requires an integer");
+                    error(e, "array size requires an integer",
+                            Type.getInt(), sizeType);
+                    return Type.getError();
                 }
                 return Type.getIntArray();
             }
             
-            default -> throw new Todo();
+            default -> {
+                error(e, "unsupported expression");
+                return Type.getError();
+            }
         }
     }
 
@@ -207,19 +341,23 @@ public class Checker {
             case Stm.If(
                     Exp cond,
                     Stm then_,
-                    Stm else_
+                Stm else_
             ) -> {
                 var resultCond = checkExp(cond);
-                if (Type.nonEquals(resultCond, Type.getBool())) {
-                    error("if require a boolean type");
+                if (!isError(resultCond)
+                        && Type.nonEquals(resultCond, Type.getBool())) {
+                    error(s, "if requires a boolean condition",
+                            Type.getBool(), resultCond);
                 }
                 checkStm(then_);
                 checkStm(else_);
             }
             case Stm.Print(Exp exp) -> {
                 var resultExp = checkExp(exp);
-                if (Type.nonEquals(resultExp, Type.getInt())) {
-                    error("print requires an integer type");
+                if (!isError(resultExp)
+                        && Type.nonEquals(resultExp, Type.getInt())) {
+                    error(s, "print requires an integer expression",
+                            Type.getInt(), resultExp);
                 }
             }
             case Stm.Assign(
@@ -229,8 +367,11 @@ public class Checker {
                 // first lookup in the method table
                 var resultAstId = checkAstId(id);
                 var resultExp = checkExp(exp);
-                if (Type.nonEquals(resultAstId, resultExp)) {
-                    error("=");
+                if (!isError(resultAstId)
+                        && !isError(resultExp)
+                        && !isAssignable(resultExp, resultAstId)) {
+                    error(s, "assignment has incompatible types",
+                            resultAstId, resultExp);
                 }
             }
             case Stm.AssignArray(AstId id, Exp index, Exp exp) -> {
@@ -238,14 +379,20 @@ public class Checker {
                 Type indexType = checkExp(index);
                 Type expType = checkExp(exp);
 
-                if (Type.nonEquals(arrayType, Type.getIntArray())) {
-                    error("array assignment requires an int[]");
+                if (!isError(arrayType)
+                        && Type.nonEquals(arrayType, Type.getIntArray())) {
+                    error(s, "array assignment requires an int[]",
+                            Type.getIntArray(), arrayType);
                 }
-                if (Type.nonEquals(indexType, Type.getInt())) {
-                    error("array index requires an integer");
+                if (!isError(indexType)
+                        && Type.nonEquals(indexType, Type.getInt())) {
+                    error(s, "array index requires an integer",
+                            Type.getInt(), indexType);
                 }
-                if (Type.nonEquals(expType, Type.getInt())) {
-                    error("array element requires an integer");
+                if (!isError(expType)
+                        && Type.nonEquals(expType, Type.getInt())) {
+                    error(s, "array element requires an integer",
+                            Type.getInt(), expType);
                 }
             }
             case Stm.Block(List<Stm> stms) -> {
@@ -253,35 +400,44 @@ public class Checker {
             }
             case Stm.While(Exp cond, Stm body) -> {
                 Type condType = checkExp(cond);
-                if (Type.nonEquals(condType, Type.getBool())) {
-                    error("while require a boolean type");
+                if (!isError(condType)
+                        && Type.nonEquals(condType, Type.getBool())) {
+                    error(s, "while requires a boolean condition",
+                            Type.getBool(), condType);
                 }
                 checkStm(body);
             }
-            default -> throw new Todo();
+            default -> error(s, "unsupported statement");
         }
     }
 
     // check type 检查声明类型是否合法
     public void checkType(Type t) {
+        checkType(t, t);
+    }
+
+    private void checkType(Type t, Object node) {
         switch (t) {
             case Type.Int(),
                 Type.Boolean(),
                 Type.IntArray() -> {
             }
 
+            case Type.Error() -> {
+            }
+
             case Type.ClassType(Id classId) -> {
                 if (classTable.getClass_(classId) == null) {
-                    error("undefined class: " + classId);
+                    error(node, "undefined class: " + classId);
                 }
             }
-    }
+        }
     }
 
     // dec 检查声明是否合法，主要检查他的声明类型
     public void checkDec(Dec d) {
         Dec.Singleton dec = (Dec.Singleton) d;
-        checkType(dec.type());
+        checkType(dec.type(), d);
     }
 
     // method type
@@ -294,7 +450,7 @@ public class Checker {
         Method.Singleton m = (Method.Singleton) mtd;
 
         // 检查声明
-        checkType(m.retType());
+        checkType(m.retType(), mtd);
         m.formals().forEach(this::checkDec);
         m.locals().forEach(this::checkDec);
 
@@ -306,8 +462,9 @@ public class Checker {
 
         var resultExp = checkExp(m.retExp());
 
-        if (Type.nonEquals(resultExp, m.retType())) {
-            error("ret type mismatch", m.retType(), resultExp);
+        if (!isError(resultExp)
+                && !isAssignable(resultExp, m.retType())) {
+            error(mtd, "return type mismatch", m.retType(), resultExp);
         }
     }
 
@@ -320,10 +477,10 @@ public class Checker {
             ClassTable.Binding binding = this.classTable.getClass_(parentId);
             // 判断父类是否存在
             if (binding == null) {
-                error("parent class not found");
+                error(c, "parent class not found: " + parentId);
+            } else {
+                cls.parent().set(binding.self());
             }
-
-            cls.parent().set(binding.self());
         }
         // 查声明
         cls.decs().forEach(this::checkDec);
@@ -462,6 +619,17 @@ public class Checker {
                 ast,
                 pp::ppProgram,
                 pp::ppProgram);
-        return traceCheckProgram.doit();
+        Ast.Program checkedAst = traceCheckProgram.doit();
+        
+        // 最后统一结束
+        if (this.errorReporter.hasErrors()) {
+            System.out.println("type checking result with errors:");
+            new PrettyPrinter(this.errorReporter).ppProgram(checkedAst);
+            System.out.println(this.errorReporter.errorCount()
+                    + " type error(s) found");
+            System.exit(1);
+        }
+
+        return checkedAst;
     }
 }

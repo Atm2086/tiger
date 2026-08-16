@@ -6,6 +6,7 @@ import util.Id;
 import util.Tuple;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -113,29 +114,42 @@ public class ClassTable {
     // get type of some field
     // return null for non-existing field.
     public Tuple.Two<Type, Id> getField(Id classId, Id fieldId) {
-        Binding classBinding = this.classTable.get(classId);
-        var result = classBinding.fields.get(fieldId);
-        while (result == null) { // search all parent classes until found or fail
-            if (classBinding.extends_ == null)
+        HashSet<Id> visited = new HashSet<>();
+        Id currentClassId = classId;
+
+        while (currentClassId != null && visited.add(currentClassId)) {
+            Binding classBinding = this.classTable.get(currentClassId);
+            if (classBinding == null) {
                 return null;
-            classBinding = this.classTable.get(classBinding.extends_);
-            result = classBinding.fields.get(fieldId);
+            }
+            Tuple.Two<Type, Id> result = classBinding.fields.get(fieldId);
+            if (result != null) {
+                return result;
+            }
+            currentClassId = classBinding.extends_;
         }
-        return result;
+        return null;
     }
 
     // get type of given method
     // return null for non-existing method
     public Tuple.Two<MethodType, Id> getMethod(Id classId, Id methodId) {
-        Binding classBinding = this.classTable.get(classId);
-        var result = classBinding.methods.get(methodId);
-        while (result == null) { // search all parent classes until found or fail
-            if (classBinding.extends_ == null)
+        HashSet<Id> visited = new HashSet<>();
+        Id currentClassId = classId;
+
+        while (currentClassId != null && visited.add(currentClassId)) {
+            Binding classBinding = this.classTable.get(currentClassId);
+            if (classBinding == null) {
                 return null;
-            classBinding = this.classTable.get(classBinding.extends_);
-            result = classBinding.methods.get(methodId);
+            }
+            Tuple.Two<MethodType, Id> result =
+                    classBinding.methods.get(methodId);
+            if (result != null) {
+                return result;
+            }
+            currentClassId = classBinding.extends_;
         }
-        return result;
+        return null;
     }
 
     // lab 2, exercise 7:
@@ -194,6 +208,7 @@ public class ClassTable {
         return switch (type) {
             case Type.Boolean() -> "boolean";
             case Type.ClassType(Id id) -> id.toString();
+            case Type.Error() -> "<error>";
             case Type.Int() -> "int";
             case Type.IntArray() -> "int[]";
         };
@@ -217,8 +232,6 @@ public class ClassTable {
         return this.classTable.toString();
     }
 }
-
-
 
 
 

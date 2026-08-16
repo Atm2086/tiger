@@ -2,6 +2,7 @@ package ast;
 
 import ast.Ast.*;
 import slp.Slp;
+import util.ErrorReporter;
 import util.Id;
 import util.Todo;
 import util.Tuple;
@@ -13,9 +14,16 @@ import java.util.function.Consumer;
 public class PrettyPrinter {
     // 缩进
     private int indentLevel = 4;
+    private final ErrorReporter errorReporter;
 
+    // 正常打印时候，不会输出错误
     public PrettyPrinter() {
+        this(null);
+    }
+
+    public PrettyPrinter(ErrorReporter errorReporter) {
         this.indentLevel = 0;
+        this.errorReporter = errorReporter;
     }
 
     // 执行缩进
@@ -47,6 +55,38 @@ public class PrettyPrinter {
         System.out.print(s);
     }
 
+    private String formatDiagnostic(ErrorReporter.Diagnostic diagnostic) {
+        StringBuilder result = new StringBuilder(diagnostic.message());
+        if (diagnostic.expected() != null || diagnostic.actual() != null) {
+            result.append("; expected: ")
+                    .append(ErrorReporter.formatType(diagnostic.expected()))
+                    .append(", actual: ")
+                    .append(ErrorReporter.formatType(diagnostic.actual()));
+        }
+        return result.toString();
+    }
+
+    private void printInlineErrors(Object node) {
+        if (this.errorReporter == null) {
+            return;
+        }
+        for (ErrorReporter.Diagnostic diagnostic
+                : this.errorReporter.getErrors(node)) {
+            sayLocal(" /* TYPE ERROR: "
+                    + formatDiagnostic(diagnostic) + " */");
+        }
+    }
+
+    private void printLineErrors(Object node) {
+        if (this.errorReporter == null) {
+            return;
+        }
+        for (ErrorReporter.Diagnostic diagnostic
+                : this.errorReporter.getErrors(node)) {
+            sayln("// TYPE ERROR: " + formatDiagnostic(diagnostic));
+        }
+    }
+
     private <T> void printSeparated(
             List<T> elements,  // 要打印的元素
             String separator,  // 分隔符
@@ -68,6 +108,7 @@ public class PrettyPrinter {
     // ast id
     public void ppAstId(AstId aid) {
         sayLocal(aid.freshId);
+        printInlineErrors(aid);
     }
 
     // /////////////////////////////////////////////////////
@@ -143,6 +184,7 @@ public class PrettyPrinter {
             }
             default -> throw new Todo();
         }
+        printInlineErrors(e);
     }
 
     // statement
@@ -223,6 +265,7 @@ public class PrettyPrinter {
             }
             default -> throw new Todo();
         }
+        printLineErrors(s);
     }
 
     // type
@@ -230,10 +273,12 @@ public class PrettyPrinter {
         switch (t) {
             case Type.Int() -> sayLocal("int");
             case Type.Boolean() -> sayLocal("boolean");
+            case Type.Error() -> sayLocal("<error>");
             case Type.IntArray() -> sayLocal("int[]");
             case Type.ClassType(Id id) -> sayLocal(id.toString());
             default -> throw new Todo();
         }
+        printInlineErrors(t);
     }
 
     // dec
@@ -242,6 +287,7 @@ public class PrettyPrinter {
         ppType(d.type());
         sayLocal(" ");
         ppAstId(d.aid());
+        printInlineErrors(dec);
     }
 
     // method
@@ -269,6 +315,7 @@ public class PrettyPrinter {
         this.sayLocal(";\n");
         unIndent();
         this.sayln("}");
+        printLineErrors(mtd);
     }
 
     // class
@@ -292,6 +339,7 @@ public class PrettyPrinter {
 
         unIndent();
         this.sayln("}");
+        printLineErrors(cls);
     }
 
     // main class
@@ -306,6 +354,7 @@ public class PrettyPrinter {
         ppStm(mc.stm());
         unIndent();
         this.sayln("}");
+        printLineErrors(m);
         unIndent();
         this.sayln("}");
     }
@@ -316,8 +365,8 @@ public class PrettyPrinter {
         ppMainClass(p.mainClass());
         this.sayln("");
         p.classes().forEach(this::ppOneClass);
+        printLineErrors(prog);
         this.sayln("\n");
     }
 
 }
-
