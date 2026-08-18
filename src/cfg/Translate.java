@@ -32,7 +32,7 @@ public class Translate {
 
     /////////////////////////////
     // translate a type
-    private Cfg.Type.T doitType(Ast.Type.T ty) {
+    private Cfg.Type.T doitType(Ast.Type ty) {
         switch (ty) {
             case Ast.Type.ClassType(Id id) -> {
                 return new Cfg.Type.ClassType(id);
@@ -46,18 +46,20 @@ public class Translate {
             case Ast.Type.Int() -> {
                 return new Cfg.Type.Int();
             }
+            case Ast.Type.Error() ->
+                    throw new IllegalStateException("error type cannot be translated to CFG");
         }
     }
 
-    private Cfg.Dec.T doitDec(Ast.Dec.T dec) {
+    private Cfg.Dec.T doitDec(Ast.Dec dec) {
         switch (dec) {
-            case Ast.Dec.Singleton(Ast.Type.T type, Ast.AstId aid) -> {
+            case Ast.Dec.Singleton(Ast.Type type, Ast.AstId aid) -> {
                 return new Cfg.Dec.Singleton(doitType(type), aid.freshId);
             }
         }
     }
 
-    private List<Cfg.Dec.T> doitDecList(List<Ast.Dec.T> decs) {
+    private List<Cfg.Dec.T> doitDecList(List<Ast.Dec> decs) {
         return decs.stream().map(this::doitDec).collect(Collectors.toList());
     }
 
@@ -76,7 +78,7 @@ public class Translate {
     /////////////////////////////
     // translate an expression
     // TODO: lab3, exercise 8.
-    private Id doitExp(Ast.Exp.T exp) {
+    private Id doitExp(Ast.Exp exp) {
         throw new Todo();
     }
 
@@ -85,20 +87,20 @@ public class Translate {
     // this function does not return its result,
     // but saved the result into "currentBlock"
     // TODO: lab3, exercise 8.
-    private void doitStm(Ast.Stm.T stm) {
+    private void doitStm(Ast.Stm stm) {
         throw new Todo();
     }
 
     // translate a method
     // TODO: lab3, exercise 8.
-    private Cfg.Function.T doitMethod(Ast.Method.T method) {
+    private Cfg.Function.T doitMethod(Ast.Method method) {
         throw new Todo();
     }
 
     // the prefixing algorithm
     // TODO: lab3, exercise 6.
     private Tuple.Two<Vector<Cfg.Dec.T>,
-            Vector<Cfg.Vtable.Entry>> prefixOneClass(Ast.Class.T cls,
+            Vector<Cfg.Vtable.Entry>> prefixOneClass(Ast.Class cls,
                                                      Tuple.Two<Vector<Cfg.Dec.T>,
                                                              Vector<Cfg.Vtable.Entry>> decsAndFunctions) {
         throw new Todo();
@@ -106,12 +108,12 @@ public class Translate {
 
     // build an inherit tree
     // TODO: lab3, exercise 5.
-    private Tree<Ast.Class.T> buildInheritTree0(Ast.Program.T ast) {
+    private Tree<Ast.Class> buildInheritTree0(Ast.Program ast) {
         throw new Todo();
     }
 
-    private Tree<Ast.Class.T> buildInheritTree(Ast.Program.T ast) {
-        Trace<Ast.Program.T, Tree<Ast.Class.T>> trace =
+    private Tree<Ast.Class> buildInheritTree(Ast.Program ast) {
+        Trace<Ast.Program, Tree<Ast.Class>> trace =
                 new Trace<>("cfg.Translate.buildInheritTree",
                         this::buildInheritTree0,
                         ast,
@@ -125,9 +127,9 @@ public class Translate {
         return trace.doit();
     }
 
-    private Cfg.Program.T doitProgram0(Ast.Program.T ast) {
+    private Cfg.Program.T doitProgram0(Ast.Program ast) {
         // Step #1: build the inheritance tree
-        Tree<Ast.Class.T> tree = buildInheritTree(ast);
+        Tree<Ast.Class> tree = buildInheritTree(ast);
         // Step #2: perform prefixing via a level-order traversal
         // we also translate each method during this traversal.
         tree.levelOrder(tree.root,
@@ -144,8 +146,8 @@ public class Translate {
 
     // given an abstract syntax tree, lower it down
     // to a corresponding control-flow graph.
-    public Cfg.Program.T doitProgram(Ast.Program.T ast) {
-        Trace<Ast.Program.T, Cfg.Program.T> trace =
+    public Cfg.Program.T doitProgram(Ast.Program ast) {
+        Trace<Ast.Program, Cfg.Program.T> trace =
                 new Trace<>("cfg.Translate.doitProgram",
                         this::doitProgram0,
                         ast,

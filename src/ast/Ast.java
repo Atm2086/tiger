@@ -284,14 +284,14 @@ public class Ast {
                                 Tuple.One<Class> parent) implements Class {
         }
 
-        public static Id getClassId(Class.T cls) {
+        public static Id getClassId(Class cls) {
             switch (cls) {
                 case Singleton(
                         Id classId,
                         Id extends_,
-                        List<Dec.T> decs,
-                        List<Method.T> methods,
-                        Tuple.One<T> parent
+                        List<Dec> decs,
+                        List<Method> methods,
+                        Tuple.One<Class> parent
                 ) -> {
                     return classId;
                 }

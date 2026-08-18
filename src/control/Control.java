@@ -61,6 +61,9 @@ public class Control {
 
     // the type checker
     public static class Type {
+        public static boolean dump = false;
+        public static boolean dumpClassTable = false;
+        public static boolean dumpMethodTable = false;
     }
 
     // the CFG
@@ -71,7 +74,5 @@ public class Control {
     public static class X64 {
         public static boolean embedComment = false;
         public static boolean dump = false;
-        public static boolean dumpClassTable = false;
-        public static boolean dumpMethodTable = false;
     }
 }

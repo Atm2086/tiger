@@ -40,7 +40,7 @@ public class Tiger {
                         Control.Verbose.L0);
         Ast.Program newAst = checkerPass.apply();
 
-        Pass<Ast.Program.T, Cfg.Program.T> transPass =
+        Pass<Ast.Program, Cfg.Program.T> transPass =
                 new Pass<>("translating to CFG",
                         new cfg.Translate()::doitProgram,
                         newAst,
@@ -50,5 +50,4 @@ public class Tiger {
 
     }
 }
-
 

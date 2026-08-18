@@ -40,7 +40,7 @@ public class Cfg {
     public static class Type {
         public sealed interface T
                 permits ClassType, CodePtr, Int, IntArray {
-        }
+        }// 对象引用、函数指针、int/boolean、int[]
 
         public record ClassType(Id id) implements T {
         }
@@ -538,6 +538,61 @@ public class Cfg {
                                 List<Function.T> functions) implements T {
         }
 
+        public static void size(T prog) {
+            switch (prog) {
+                case Singleton(
+                        _,
+                        _,
+                        _,
+                        _,
+                        List<Function.T> functions
+                ) -> {
+                    int totalMethods = functions.size();
+                    int totalBlocks = 0;
+                    int totalStms = 0;
+
+                    sayln("<#methods, #blocks, #statements>");
+                    sayln("---------------------------------");
+
+                    for (Function.T function : functions) {
+                        switch (function) {
+                            case Function.Singleton(
+                                    _,
+                                    Id classId,
+                                    Id functionId,
+                                    _,
+                                    _,
+                                    List<Block.T> blocks
+                            ) -> {
+                                int numBlocks = blocks.size();
+                                int numStms = 0;
+
+                                for (Block.T block : blocks) {
+                                    switch (block) {
+                                        case Block.Singleton(_, List<Stm.T> stms, _) ->
+                                                numStms += stms.size();
+                                    }
+                                }
+
+                                totalBlocks += numBlocks;
+                                totalStms += numStms;
+
+                                sayln("<\"" + classId + "_" + functionId
+                                        + "\", " + numBlocks
+                                        + ", " + numStms + ">");
+                            }
+                        }
+                    }
+
+                    sayln("---------------------------------");
+                    sayln("subtotal: "
+                            + totalMethods + ", "
+                            + totalBlocks + ", "
+                            + totalStms);
+                }
+            }
+        }
+
         public static void dot(T prog) {
             switch (prog) {
                 case Singleton(
@@ -555,8 +610,8 @@ public class Cfg {
                 case Singleton(
                         Id mainClassId,
                         Id mainFuncId,
-                        List<Vtable.T> vtables,
-                        List<Struct.T> structs,
+                        List<Vtable.T> vtables,  // 虚函数表
+                        List<Struct.T> structs,  //
                         List<Function.T> functions
                 ) -> {
                     printSpaces();
