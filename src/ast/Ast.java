@@ -12,7 +12,7 @@ public class Ast {
     // ast-id
     public static class AstId {
         public Id id;
-        public Id freshId;
+        public Id freshId; // AstId class 本身就有一个 freshId
         public Type type;
         public boolean isClassField;
 
@@ -23,7 +23,7 @@ public class Ast {
             this.type = null;
             this.isClassField = false;
         }
-
+        // 产生 freshId 的 方法就是
         public Id genFreshId() {
             this.freshId = this.id.newSameOrigName();
             return this.freshId;
@@ -125,7 +125,7 @@ public class Ast {
     }
 
     // ///////////////////////////////////////////////////
-    // declaration
+    // declaration，注意这里的 id 用的是含了 freshId 的 aid
     public sealed interface Dec
                 permits Dec.Singleton {
 

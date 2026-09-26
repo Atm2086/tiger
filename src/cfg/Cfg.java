@@ -106,9 +106,9 @@ public class Cfg {
                 permits Singleton {
         }
 
-        public record Entry(Type.T retType,
-                            Id classId,
-                            Id functionId,
+        public record Entry(Type.T retType, // 返回类型
+                            Id classId,     // 实现这个方法的类
+                            Id functionId,  // 函数签名 和 参数声明列表
                             List<Dec.T> argTypes) {
         }
 
@@ -123,7 +123,7 @@ public class Cfg {
                     sayln("struct V_" + name + " {");
                     // all entries
                     indent();
-                    for (Entry e : funcTypes) {
+                    for (Entry e : funcTypes) { // 针对每个 func
                         printSpaces();
                         Type.pp(e.retType);
                         say(" " + e.functionId + "(");
@@ -135,7 +135,7 @@ public class Cfg {
                     }
                     unIndent();
                     printSpaces();
-                    sayln("} V_" + name + "_ = {");
+                    sayln("} V_" + name + "_ = {");// 函数槽位指向谁的实现，因为有重写
                     indent();
                     for (Entry e : funcTypes) {
                         printSpaces();
@@ -194,6 +194,7 @@ public class Cfg {
     // /////////////////////////////////////////////////////////
     // expression
     public static class Exp {
+        // 需要补充操作，ast里有但cfg里没有
         public sealed interface T
                 permits Bop, Call, Eid, GetMethod, Int, New, Print {
         }
@@ -485,7 +486,7 @@ public class Cfg {
                         List<Dec.T> locals,
                         List<Block.T> blocks
                 ) -> {
-                    Dot d = new util.Dot(classId.toString() + "-" + functionId.toString());
+                    Dot d = new util.Dot(classId.toString() + "-" + functionId.toString()); // QS-Sort.dot.png
                     blocks.forEach((b) -> Block.dot(b, d));
                     d.visualize();
                 }
@@ -533,8 +534,8 @@ public class Cfg {
 
         public record Singleton(Id mainClassId,
                                 Id mainFuncId, // name of the entry function
-                                List<Vtable.T> vtables,
-                                List<Struct.T> structs,
+                                List<Vtable.T> vtables, // 虚函数表，去找这个函数
+                                List<Struct.T> structs, // 对象的存储布局
                                 List<Function.T> functions) implements T {
         }
 

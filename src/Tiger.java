@@ -47,7 +47,10 @@ public class Tiger {
                         Control.Verbose.L0);
         Cfg.Program.T cfg = transPass.apply();
 
-
+        // 为了提前打印cfg 新增
+        if (Control.Dot.beingDotted("cfg")) {
+                Cfg.Program.dot(cfg);
+        }
     }
 }
 

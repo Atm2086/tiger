@@ -518,6 +518,7 @@ public class Checker {
         // add all instance variables into the class table
         for (Dec dec : c.decs()) {
             Dec.Singleton d = (Dec.Singleton) dec;
+            // 这里转化的 freshid，把classTable里放入的 field 变成唯一的
             this.classTable.putField(c.classId(),
                     d.aid(),
                     d.type());
