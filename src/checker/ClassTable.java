@@ -3,10 +3,10 @@ package checker;
 import ast.Ast;
 import ast.Ast.Type;
 import util.Id;
-import util.Todo;
 import util.Tuple;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 
@@ -18,13 +18,13 @@ public class ClassTable {
     }
 
     // a special type for method: argument and return types
-    public record MethodType(Type.T retType,
-                             List<Ast.Type.T> argsType) {
+    public record MethodType(Type retType,
+                             List<Ast.Type> argsType) {
         @Override
         public String toString() {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.append("(");
-            for (Type.T type : this.argsType) {
+            for (Type type : this.argsType) {
                 stringBuilder.append(type.toString() + ", ");
             }
             stringBuilder.append(") -> " + this.retType.toString());
@@ -35,14 +35,14 @@ public class ClassTable {
     // the binding for a class
     public record Binding(
             // null for empty extends
-            Id extends_,
-            Ast.Class.T self,
+            Id extends_, // 父类
+            Ast.Class self, // 自己的AST树
             // the field in a class: its type and fresh id
-            java.util.HashMap<Id, Tuple.Two<Type.T, Id>> fields,
+            java.util.HashMap<Id, Tuple.Two<Type, Id>> fields,
             // the method in a class: its type and fresh id
             java.util.HashMap<Id, Tuple.Two<MethodType, Id>> methods) {
 
-        public void putField(Id fieldId, Type.T type, Id freshId) {
+        public void putField(Id fieldId, Type type, Id freshId) {
             if (this.fields.get(fieldId) != null) {
                 error("duplicated class field: " + fieldId);
             }
@@ -69,6 +69,7 @@ public class ClassTable {
     }
 
     // map each class, to its corresponding class binding.
+    // 这个是主要的成员
     private final java.util.HashMap<Id, Binding> classTable;
 
     public ClassTable() {
@@ -76,7 +77,7 @@ public class ClassTable {
     }
 
     // Duplication is not allowed
-    public void putClass(Id classId, Id extends_, Ast.Class.T self) {
+    public void putClass(Id classId, Id extends_, Ast.Class self) {
         if (this.classTable.get(classId) != null) {
             error("duplicated class: " + classId);
         }
@@ -89,7 +90,7 @@ public class ClassTable {
 
     // put a field into class table
     // Duplication is not allowed
-    public void putField(Id classId, Ast.AstId fieldId, Type.T type) {
+    public void putField(Id classId, Ast.AstId fieldId, Type type) {
         Binding classBinding = this.classTable.get(classId);
         Id freshId = fieldId.genFreshId();
         classBinding.putField(fieldId.id, type, freshId);
@@ -112,35 +113,118 @@ public class ClassTable {
 
     // get type of some field
     // return null for non-existing field.
-    public Tuple.Two<Type.T, Id> getField(Id classId, Id fieldId) {
-        Binding classBinding = this.classTable.get(classId);
-        var result = classBinding.fields.get(fieldId);
-        while (result == null) { // search all parent classes until found or fail
-            if (classBinding.extends_ == null)
+    public Tuple.Two<Type, Id> getField(Id classId, Id fieldId) {
+        HashSet<Id> visited = new HashSet<>();
+        Id currentClassId = classId;
+
+        while (currentClassId != null && visited.add(currentClassId)) {
+            Binding classBinding = this.classTable.get(currentClassId);
+            if (classBinding == null) {
                 return null;
-            classBinding = this.classTable.get(classBinding.extends_);
-            result = classBinding.fields.get(fieldId);
+            }
+            Tuple.Two<Type, Id> result = classBinding.fields.get(fieldId);
+            if (result != null) {
+                return result;
+            }
+            currentClassId = classBinding.extends_;
         }
-        return result;
+        return null;
     }
 
     // get type of given method
     // return null for non-existing method
     public Tuple.Two<MethodType, Id> getMethod(Id classId, Id methodId) {
-        Binding classBinding = this.classTable.get(classId);
-        var result = classBinding.methods.get(methodId);
-        while (result == null) { // search all parent classes until found or fail
-            if (classBinding.extends_ == null)
+        HashSet<Id> visited = new HashSet<>();
+        Id currentClassId = classId;
+
+        while (currentClassId != null && visited.add(currentClassId)) {
+            Binding classBinding = this.classTable.get(currentClassId);
+            if (classBinding == null) {
                 return null;
-            classBinding = this.classTable.get(classBinding.extends_);
-            result = classBinding.methods.get(methodId);
+            }
+            Tuple.Two<MethodType, Id> result =
+                    classBinding.methods.get(methodId);
+            if (result != null) {
+                return result;
+            }
+            currentClassId = classBinding.extends_;
         }
-        return result;
+        return null;
     }
 
     // lab 2, exercise 7:
     public void dump() {
-        throw new Todo();
+        System.out.println("ClassTable:");
+
+        if (this.classTable.isEmpty()) {
+            System.out.println("  <empty>");
+            return;
+        }
+
+        this.classTable.entrySet().stream()
+                .sorted((left, right) -> left.getKey().toString()
+                        .compareTo(right.getKey().toString()))
+                .forEach(classEntry -> {
+                    Id classId = classEntry.getKey();
+                    Binding binding = classEntry.getValue();
+
+                    System.out.println("  class " + classId);
+                    System.out.println("    extends: "
+                            + Objects.requireNonNullElse(binding.extends_(), "<none>"));
+
+                    System.out.println("    fields:");
+                    if (binding.fields().isEmpty()) {
+                        System.out.println("      <empty>");
+                    } else {
+                        binding.fields().entrySet().stream()
+                                .sorted((left, right) -> left.getKey().toString()
+                                        .compareTo(right.getKey().toString()))
+                                .forEach(fieldEntry -> {
+                                    Tuple.Two<Type, Id> field = fieldEntry.getValue();
+                                    System.out.println("      " + fieldEntry.getKey()
+                                            + " : " + formatType(field.first())
+                                            + " (fresh: " + field.second() + ")");
+                                });
+                    }
+
+                    System.out.println("    methods:");
+                    if (binding.methods().isEmpty()) {
+                        System.out.println("      <empty>");
+                    } else {
+                        binding.methods().entrySet().stream()
+                                .sorted((left, right) -> left.getKey().toString()
+                                        .compareTo(right.getKey().toString()))
+                                .forEach(methodEntry -> {
+                                    Tuple.Two<MethodType, Id> method = methodEntry.getValue();
+                                    System.out.println("      " + methodEntry.getKey()
+                                            + " : " + formatMethodType(method.first())
+                                            + " (fresh: " + method.second() + ")");
+                                });
+                    }
+                });
+    }
+
+    static String formatType(Type type) {
+        return switch (type) {
+            case Type.Boolean() -> "boolean";
+            case Type.ClassType(Id id) -> id.toString();
+            case Type.Error() -> "<error>";
+            case Type.Int() -> "int";
+            case Type.IntArray() -> "int[]";
+        };
+    }
+
+    private static String formatMethodType(MethodType methodType) {
+        StringBuilder result = new StringBuilder("(");
+        for (int i = 0; i < methodType.argsType().size(); i++) {
+            if (i > 0) {
+                result.append(", ");
+            }
+            result.append(formatType(methodType.argsType().get(i)));
+        }
+        result.append(") -> ");
+        result.append(formatType(methodType.retType()));
+        return result.toString();
     }
 
     @Override
@@ -148,9 +232,6 @@ public class ClassTable {
         return this.classTable.toString();
     }
 }
-
-
-
 
 
 

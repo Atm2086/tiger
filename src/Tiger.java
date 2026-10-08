@@ -24,7 +24,7 @@ public class Tiger {
 
         // /////////////////////////////////////////////////////////
         // otherwise, we continue the normal compilation pipeline.
-        Pass<String, Ast.Program.T> parserPass =
+        Pass<String, Ast.Program> parserPass =
                 new Pass<>("parsing",
                         // a special hack to allow us to use the builtin ast,
                         // in case that your parser does not work properly.
@@ -33,16 +33,16 @@ public class Tiger {
                                 Control.bultinAst),
                         fileName,
                         Control.Verbose.L0);
-        Ast.Program.T ast = parserPass.apply();
+        Ast.Program ast = parserPass.apply();
 
-        Pass<Ast.Program.T, Ast.Program.T> checkerPass =
+        Pass<Ast.Program, Ast.Program> checkerPass =
                 new Pass<>("type checking",
                         new Checker()::check,
                         ast,
                         Control.Verbose.L0);
-        Ast.Program.T newAst = checkerPass.apply();
+        Ast.Program newAst = checkerPass.apply();
 
-        Pass<Ast.Program.T, Cfg.Program.T> transPass =
+        Pass<Ast.Program, Cfg.Program.T> transPass =
                 new Pass<>("translating to CFG",
                         new cfg.Translate()::doitProgram,
                         newAst,
@@ -64,7 +64,10 @@ public class Tiger {
         X64.Program.T newX64 = regAllocPass.apply();
 
 
+        // 为了提前打印cfg 新增
+        if (Control.Dot.beingDotted("cfg")) {
+                Cfg.Program.dot(cfg);
+        }
     }
 }
-
 

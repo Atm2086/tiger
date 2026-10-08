@@ -8,7 +8,7 @@ public class Main {
         obj.doit(SamplePrograms.sample2);
     }
 
-    public void doit(Slp.Stm.T prog) {
+    public void doit(Slp.Stm prog) {
         PrettyPrint pp = new PrettyPrint();
         pp.ppStm(prog);
 

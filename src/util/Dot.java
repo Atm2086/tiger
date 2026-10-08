@@ -20,6 +20,7 @@ public class Dot {
     //
     private final String name;
     private final LinkedList<Element> list;
+    private final LinkedList<String> nodes = new LinkedList<>();
 
     public Dot(String name) {
         this.name = name;
@@ -30,12 +31,20 @@ public class Dot {
         this.insert(from, to, "");
     }
 
+    public void addNode(String id, String text) {
+        String label = text.replace("\\", "\\\\").replace("\"", "\\\"")
+                .replace("\r\n", "\n").replace("\n", "\\l");
+        this.nodes.add(id + " [shape=box, label=\"" + label + "\"];\n");
+    }
+
     public void insert(String from, String to, String info) {
         String s = "[label=\"" + info + "\"]";
         this.list.addFirst(new Element(from, to, s));
     }
 
     private void output(BufferedWriter bw) throws IOException {
+        for (String node : nodes)
+            bw.write(node);
         for (Element e : list) {
             bw.write(e.toString());
         }
