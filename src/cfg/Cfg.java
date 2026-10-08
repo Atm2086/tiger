@@ -3,8 +3,10 @@ package cfg;
 import util.Dot;
 import util.Id;
 import util.Label;
-import util.Todo;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 public class Cfg {
@@ -21,9 +23,13 @@ public class Cfg {
     }
 
     private static void printSpaces() {
+        printSpaces(System.out);
+    }
+
+    private static void printSpaces(PrintStream out) {
         int i = indentLevel;
         while (i-- != 0) {
-            say(" ");
+            out.print(" ");
         }
     }
 
@@ -55,11 +61,15 @@ public class Cfg {
         }
 
         public static void pp(T ty) {
+            pp(ty, System.out);
+        }
+
+        public static void pp(T ty, PrintStream out) {
             switch (ty) {
-                case ClassType(Id id) -> say(id.toString());
-                case CodePtr() -> say("CodePtr");
-                case Int() -> say("int");
-                case IntArray() -> say("int[]");
+                case ClassType(Id id) -> out.print(id);
+                case CodePtr() -> out.print("CodePtr");
+                case Int() -> out.print("int");
+                case IntArray() -> out.print("int[]");
             }
         }
     }
@@ -176,6 +186,7 @@ public class Cfg {
                     for (Cfg.Dec.T dec : fields) {
                         printSpaces();
                         Dec.pp(dec);
+                        sayln(";");
                     }
                     unIndent();
                     printSpaces();
@@ -196,7 +207,8 @@ public class Cfg {
     public static class Exp {
         // 需要补充操作，ast里有但cfg里没有
         public sealed interface T
-                permits Bop, Call, Eid, GetMethod, Int, New, Print {
+                permits Bop, Call, Eid, GetMethod, Int, New, Print,
+                        GetField, NewIntArray, ArraySelect, Length {
         }
 
         public record Bop(String op,
@@ -229,31 +241,53 @@ public class Cfg {
         public record Print(Id x) implements T {
         }
 
+        public record GetField(Id object, Id field) implements T {
+        }
+
+        public record NewIntArray(Id size) implements T {
+        }
+
+        public record ArraySelect(Id array, Id index) implements T {
+        }
+
+        public record Length(Id array) implements T {
+        }
+
         public static void pp(Exp.T t) {
+            pp(t, System.out);
+        }
+
+        // 同一份 pp 逻辑既能输出到终端，也能写入 DOT 标签的缓冲区。
+        public static void pp(Exp.T t, PrintStream out) {
             switch (t) {
                 case Bop(String op, List<Id> operands, Type.T type) -> {
-                    say(op + "(");
-                    operands.forEach((e) -> {
-                        say(e.toString() + ", ");
-                    });
-                    say(")  @ty:");
-                    Type.pp(type);
+                    out.print(op + "(");
+                    for (int i = 0; i < operands.size(); i++) {
+                        if (i > 0) out.print(", ");
+                        out.print(operands.get(i));
+                    }
+                    out.print(")  @ty:");
+                    Type.pp(type, out);
                 }
                 case Call(Id func, List<Id> args, Type.T retType) -> {
-                    say(func.toString() + "(");
-                    args.forEach((e) -> {
-                        say(e.toString() + ", ");
-                    });
-                    say(")  @retType:");
-                    Type.pp(retType);
+                    out.print(func + "(");
+                    for (int i = 0; i < args.size(); i++) {
+                        if (i > 0) out.print(", ");
+                        out.print(args.get(i));
+                    }
+                    out.print(")  @retType:");
+                    Type.pp(retType, out);
                 }
-                case Eid(Id id, Type.T type) -> say(id);
+                case Eid(Id id, Type.T type) -> out.print(id);
                 case GetMethod(Id objId, Id classId, Id methodId) ->
-                        say("getMethod(" + objId.toString() + ", " + classId.toString() + ", " + methodId.toString());
-                case Int(int n) -> say(n);
-                case New(Id classId) -> say("new " + classId.toString() + "()");
-                case Print(Id x) -> say("print(" + x.toString() + ")");
-                default -> throw new Todo(t);
+                        out.print("getMethod(" + objId + ", " + classId + ", " + methodId + ")");
+                case Int(int n) -> out.print(n);
+                case New(Id classId) -> out.print("new " + classId + "()");
+                case Print(Id x) -> out.print("print(" + x + ")");
+                case GetField(Id object, Id field) -> out.print(object + "." + field);
+                case NewIntArray(Id size) -> out.print("new int[" + size + "]");
+                case ArraySelect(Id array, Id index) -> out.print(array + "[" + index + "]");
+                case Length(Id array) -> out.print(array + ".length");
             }
         }
     }
@@ -263,7 +297,7 @@ public class Cfg {
     // statement
     public static class Stm {
         public sealed interface T
-                permits Assign {
+                permits Assign, PutField, AssignArray {
         }
 
         // assign
@@ -272,15 +306,29 @@ public class Cfg {
                              Exp.T exp) implements T {
         }
 
+        public record PutField(Id object, Id field, Id value) implements T {
+        }
+
+        public record AssignArray(Id array, Id index, Id value) implements T {
+        }
+
         static void pp(Stm.T t) {
+            pp(t, System.out);
+        }
+
+        static void pp(Stm.T t, PrintStream out) {
+            printSpaces(out);
             switch (t) {
                 case Assign(Id x, Exp.T exp) -> {
-                    printSpaces();
-                    say(x + " = ");
-                    Exp.pp(exp);
-                    sayln(";");
+                    out.print(x + " = ");
+                    Exp.pp(exp, out);
                 }
+                case PutField(Id object, Id field, Id value) ->
+                        out.print(object + "." + field + " = " + value);
+                case AssignArray(Id array, Id index, Id value) ->
+                        out.print(array + "[" + index + "] = " + value);
             }
+            out.println(";");
         }
     }
     // end of statement
@@ -310,8 +358,8 @@ public class Cfg {
                         Block.T thenn,
                         Block.T elsee
                 ) -> {
-                    d.insert(from, Block.getLabel(thenn).toString());
-                    d.insert(from, Block.getLabel(elsee).toString());
+                    d.insert(from, Block.getLabel(thenn).toString(), "true");
+                    d.insert(from, Block.getLabel(elsee).toString(), "false");
                 }
                 case Jmp(Block.T target) -> d.insert(from,
                         Block.getLabel(target).toString());
@@ -321,24 +369,26 @@ public class Cfg {
         }
 
         public static void pp(T t) {
+            pp(t, System.out);
+        }
+
+        public static void pp(T t, PrintStream out) {
+            printSpaces(out);
             switch (t) {
                 case If(
                         Id x,
                         Block.T thenn,
                         Block.T elsee
                 ) -> {
-                    printSpaces();
-                    say("if(" + x.toString());
-                    say(", " + Block.getLabel(thenn).toString() + ", " + Block.getLabel(elsee).toString() + ");");
+                    out.print("if(" + x + ", " + Block.getLabel(thenn)
+                            + ", " + Block.getLabel(elsee) + ");");
                 }
                 case Jmp(Block.T target) -> {
-                    printSpaces();
-                    say("jmp " + Block.getLabel(target).toString() + ";");
+                    out.print("jmp " + Block.getLabel(target) + ";");
 
                 }
                 case Ret(Id x) -> {
-                    printSpaces();
-                    say("ret " + x.toString() + ";");
+                    out.print("ret " + x + ";");
                 }
             }
         }
@@ -385,8 +435,14 @@ public class Cfg {
                         Label label,
                         List<Stm.T> _,
                         List<Transfer.T> trans
-                ) -> trans.forEach((tr) -> Transfer.dot(d,
-                        label.toString(), tr));
+                ) -> {
+                    ByteArrayOutputStream text = new ByteArrayOutputStream();
+                    try (PrintStream out = new PrintStream(text, false, StandardCharsets.UTF_8)) {
+                        pp(t, out);
+                    }
+                    d.addNode(label.toString(), text.toString(StandardCharsets.UTF_8));
+                    trans.forEach(tr -> Transfer.dot(d, label.toString(), tr));
+                }
             }
         }
 
@@ -403,19 +459,23 @@ public class Cfg {
         }
 
         public static void pp(T b) {
+            pp(b, System.out);
+        }
+
+        public static void pp(T b, PrintStream out) {
             switch (b) {
                 case Singleton(
                         Label label,
                         List<Stm.T> stms,
                         List<Transfer.T> transfer
                 ) -> {
-                    printSpaces();
-                    sayln(label.toString() + ":");
+                    printSpaces(out);
+                    out.println(label + ":");
                     indent();
-                    stms.forEach(Stm::pp);
-                    Transfer.pp(transfer.getFirst());
+                    stms.forEach(stm -> Stm.pp(stm, out));
+                    Transfer.pp(transfer.getFirst(), out);
                     unIndent();
-                    sayln("");
+                    out.println();
                 }
             }
         }
@@ -475,7 +535,6 @@ public class Cfg {
             }
         }
 
-        // TODO: lab3, exercise 4.
         public static void dot(T func) {
             switch (func) {
                 case Singleton(

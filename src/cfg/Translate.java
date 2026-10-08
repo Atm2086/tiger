@@ -75,26 +75,166 @@ public class Translate {
         this.newDecs.add(dec);
     }
 
-    /////////////////////////////
-    // translate an expression
-    // TODO: lab3, exercise 8.
+    private Id newTemp(Cfg.Type.T type) {
+        Id id = Id.newNoname();
+        emitDec(new Cfg.Dec.Singleton(type, id));
+        return id;
+    }
+
+    // 生成 t = exp，并返回结果变量 t。
+    private Id emitValue(Cfg.Exp.T exp, Cfg.Type.T type) {
+        Id id = newTemp(type);
+        emit(new Cfg.Stm.Assign(id, exp));
+        return id;
+    }
+
+    // 创建并登记基本块；由调用方决定何时切换 currentBlock。
+    private Cfg.Block.T newBlock() {
+        Cfg.Block.T block = new Cfg.Block.Singleton(new Label(),
+                new LinkedList<>(), new LinkedList<>());
+        Cfg.Function.addBlock(this.currentFunction, block);
+        return block;
+    }
+
+    private Id readId(Ast.AstId aid) {
+        if (aid.isClassField)
+            return emitValue(new Cfg.Exp.GetField(this.currentThis, aid.freshId),
+                    doitType(aid.type));
+        return aid.freshId;
+    }
+
+    // translate an expression, returning the ID holding its value
     private Id doitExp(Ast.Exp exp) {
-        throw new Todo();
+        return switch (exp) {
+            case Ast.Exp.Num(int n) -> emitValue(new Cfg.Exp.Int(n), new Cfg.Type.Int());
+            case Ast.Exp.True() -> emitValue(new Cfg.Exp.Int(1), new Cfg.Type.Int());
+            case Ast.Exp.False() -> emitValue(new Cfg.Exp.Int(0), new Cfg.Type.Int());
+            case Ast.Exp.This() -> this.currentThis;
+            case Ast.Exp.ExpId(Ast.AstId aid) -> readId(aid);
+            case Ast.Exp.Bop(var left, String op, var right) -> {
+                Id lhs = doitExp(left);
+                Id rhs = doitExp(right);
+                yield emitValue(new Cfg.Exp.Bop(op, List.of(lhs, rhs), new Cfg.Type.Int()),
+                        new Cfg.Type.Int());
+            }
+            case Ast.Exp.Uop(String op, var operand) ->
+                    emitValue(new Cfg.Exp.Bop(op, List.of(doitExp(operand)), new Cfg.Type.Int()),
+                            new Cfg.Type.Int());
+            case Ast.Exp.BopBool(var left, String _, var right) -> {
+                // MiniJava 只有 &&；左侧为假时直接进入汇合块。
+                Id lhs = doitExp(left);
+                Id result = newTemp(new Cfg.Type.Int());
+                emit(new Cfg.Stm.Assign(result, new Cfg.Exp.Int(0)));
+                Cfg.Block.T rhsBlock = newBlock();
+                Cfg.Block.T join = newBlock();
+                emitTransfer(new Cfg.Transfer.If(lhs, rhsBlock, join));
+                this.currentBlock = rhsBlock;
+                Id rhs = doitExp(right);
+                emit(new Cfg.Stm.Assign(result, new Cfg.Exp.Eid(rhs, new Cfg.Type.Int())));
+                emitTransfer(new Cfg.Transfer.Jmp(join));
+                this.currentBlock = join;
+                yield result;
+            }
+            case Ast.Exp.NewObject(Id classId) ->
+                    emitValue(new Cfg.Exp.New(classId), new Cfg.Type.ClassType(classId));
+            case Ast.Exp.NewIntArray(var size) ->
+                    emitValue(new Cfg.Exp.NewIntArray(doitExp(size)), new Cfg.Type.IntArray());
+            case Ast.Exp.ArraySelect(var array, var index) -> {
+                Id a = doitExp(array);
+                Id i = doitExp(index);
+                yield emitValue(new Cfg.Exp.ArraySelect(a, i), new Cfg.Type.Int());
+            }
+            case Ast.Exp.Length(var array) ->
+                    emitValue(new Cfg.Exp.Length(doitExp(array)), new Cfg.Type.Int());
+            case Ast.Exp.Call(var receiver, var methodId, var args, var objectType, var retType) -> {
+                Id obj = doitExp(receiver);
+                var operands = new LinkedList<Id>();
+                operands.add(obj);
+                // 接收者和实参按源码顺序求值；接收者是显式的第一个参数。
+                for (Ast.Exp arg : args)
+                    operands.add(doitExp(arg));
+                // 静态类型和方法 ID 定位槽位，运行时查实际对象的虚方法表。
+                Id func = emitValue(new Cfg.Exp.GetMethod(obj, objectType.get(), methodId.freshId),
+                        new Cfg.Type.CodePtr());
+                Cfg.Type.T type = doitType(retType.get());
+                yield emitValue(new Cfg.Exp.Call(func, operands, type), type);
+            }
+        };
     }
 
     /////////////////////////////
     // translate a statement
     // this function does not return its result,
     // but saved the result into "currentBlock"
-    // TODO: lab3, exercise 8.
     private void doitStm(Ast.Stm stm) {
-        throw new Todo();
+        switch (stm) {
+            case Ast.Stm.Assign(var aid, var exp) -> {
+                Id value = doitExp(exp);
+                if (aid.isClassField)
+                    emit(new Cfg.Stm.PutField(this.currentThis, aid.freshId, value));
+                else
+                    emit(new Cfg.Stm.Assign(aid.freshId, new Cfg.Exp.Eid(value, doitType(aid.type))));
+            }
+            case Ast.Stm.AssignArray(var aid, var index, var exp) -> {
+                Id array = readId(aid);
+                Id i = doitExp(index);
+                Id value = doitExp(exp);
+                emit(new Cfg.Stm.AssignArray(array, i, value));
+            }
+            case Ast.Stm.Block(var stms) -> stms.forEach(this::doitStm);
+            case Ast.Stm.Print(var exp) ->
+                    emitValue(new Cfg.Exp.Print(doitExp(exp)), new Cfg.Type.Int());
+            case Ast.Stm.If(var cond, var thenn, var elsee) -> {
+                Id condition = doitExp(cond);
+                Cfg.Block.T trueBlock = newBlock();
+                Cfg.Block.T falseBlock = newBlock();
+                Cfg.Block.T join = newBlock();
+                emitTransfer(new Cfg.Transfer.If(condition, trueBlock, falseBlock));
+                this.currentBlock = trueBlock;
+                doitStm(thenn);
+                // 嵌套语句可能改变 currentBlock，从翻译后的当前块接入汇合点。
+                emitTransfer(new Cfg.Transfer.Jmp(join));
+                this.currentBlock = falseBlock;
+                doitStm(elsee);
+                emitTransfer(new Cfg.Transfer.Jmp(join));
+                this.currentBlock = join;
+            }
+            case Ast.Stm.While(var cond, var body) -> {
+                Cfg.Block.T test = newBlock();
+                Cfg.Block.T loop = newBlock();
+                Cfg.Block.T exit = newBlock();
+                emitTransfer(new Cfg.Transfer.Jmp(test));
+                this.currentBlock = test;
+                Id condition = doitExp(cond);
+                emitTransfer(new Cfg.Transfer.If(condition, loop, exit));
+                this.currentBlock = loop;
+                doitStm(body);
+                emitTransfer(new Cfg.Transfer.Jmp(test));
+                this.currentBlock = exit;
+            }
+        }
     }
 
     // translate a method
-    // TODO: lab3, exercise 8.
     private Cfg.Function.T doitMethod(Ast.Method method) {
-        throw new Todo();
+        Ast.Method.Singleton m = (Ast.Method.Singleton) method;
+        var formals = new LinkedList<>(doitDecList(m.formals()));
+        this.currentThis = null;
+        if (m.methodId().freshId != this.mainFunctionId) {
+            this.currentThis = Id.newName("this").newSameOrigName();
+            formals.addFirst(new Cfg.Dec.Singleton(
+                    new Cfg.Type.ClassType(this.currentClassId), this.currentThis));
+        }
+        this.newDecs = new LinkedList<>();
+        this.currentFunction = new Cfg.Function.Singleton(doitType(m.retType()),
+                this.currentClassId, m.methodId().freshId, formals,
+                doitDecList(m.locals()), new LinkedList<>());
+        this.currentBlock = newBlock();
+        m.stms().forEach(this::doitStm);
+        Id result = doitExp(m.retExp());
+        emitTransfer(new Cfg.Transfer.Ret(result));
+        Cfg.Function.addDecs(this.currentFunction, this.newDecs);
+        return this.currentFunction;
     }
 
     // the prefixing algorithm
@@ -118,26 +258,14 @@ public class Translate {
             Id functionId = m.methodId().freshId; // 要取实际的，后面替换
 
             boolean isMain = functionId == this.mainFunctionId;
-            var formals = new LinkedList<>(doitDecList(m.formals())); // formals 形参声明列表
-
-            this.currentThis = null;
-            if (!isMain) {
-                this.currentThis = Id.newName("this").newSameOrigName();
-                formals.addFirst(new Cfg.Dec.Singleton(
-                        new Cfg.Type.ClassType(this.currentClassId), this.currentThis));
-            }
-
-            // Ex7：先生成空函数，方法体的基本块留给 Ex8 翻译。
-            var retType = doitType(m.retType());
-            this.functions.add(new Cfg.Function.Singleton(retType,
-                    this.currentClassId, functionId, formals,
-                    doitDecList(m.locals()), new LinkedList<>()));
+            Cfg.Function.Singleton function = (Cfg.Function.Singleton) doitMethod(method);
+            this.functions.add(function);
 
             // 主入口是静态方法，不加入对象的虚方法表。
             if (isMain)
                 continue;
-            var entry = new Cfg.Vtable.Entry(retType, this.currentClassId,
-                    functionId, formals);
+            var entry = new Cfg.Vtable.Entry(function.retType(), this.currentClassId,
+                    functionId, function.formals());
             int slot = 0;
             while (slot < entries.size()
                     && !Id.originalEquals(entries.get(slot).functionId(), functionId)) {
