@@ -49,6 +49,11 @@ public class Tiger {
                         Control.Verbose.L0);
         Cfg.Program.T cfg = transPass.apply();
 
+        // 为了提前打印cfg 新增
+        if (Control.Dot.beingDotted("cfg")) {
+                Cfg.Program.dot(cfg);
+        }
+
         Pass<Cfg.Program.T, X64.Program.T> codeGenPass =
                 new Pass<>("code generation",
                         new codegen.Munch()::doitProgram,
@@ -56,18 +61,14 @@ public class Tiger {
                         Control.Verbose.L0);
         X64.Program.T x64 = codeGenPass.apply();
 
-        Pass<X64.Program.T, X64.Program.T> regAllocPass =
-                new Pass<>("register allocation",
-                        new Allocator()::doitProgram,
-                        x64,
-                        Control.Verbose.L0);
-        X64.Program.T newX64 = regAllocPass.apply();
+        // Pass<X64.Program.T, X64.Program.T> regAllocPass =
+        //         new Pass<>("register allocation",
+        //                 new Allocator()::doitProgram,
+        //                 x64,
+        //                 Control.Verbose.L0);
+        // X64.Program.T newX64 = regAllocPass.apply();
 
 
-        // 为了提前打印cfg 新增
-        if (Control.Dot.beingDotted("cfg")) {
-                Cfg.Program.dot(cfg);
-        }
     }
 }
 
