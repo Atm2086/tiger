@@ -591,7 +591,6 @@ public class Checker {
                         Control.Verbose.L1);
         p = buildTablePass.apply();
 
-        System.out.println("dump after build");
         // dump after build
         if (Control.Type.dumpClassTable) {
             this.classTable.dump();
